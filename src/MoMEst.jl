@@ -1,4 +1,5 @@
-using LinearAlgebra
+#functions for calculating and fitting method of moments
+#estimates for VarLMM model
 
 #vech operation
 function vech(a::Union{Number, AbstractVecOrMat})
@@ -46,6 +47,10 @@ function update_res!(
     nothing
 end
 
+function exp!(x::Array{T}) where T <: BlasReal
+    copyto!(x, exp.(x))
+end
+
 """
 MoMobjf(obs::varlmmObs{T},
 β::Vector{T},
@@ -59,11 +64,11 @@ Evaluates the method of moments objective function for the given data and parame
     and also the gradient.
 """
 function MoMobjf!(obs::varlmmObs{T},
-        β::Vector{Float64},
-        τ::Vector{Float64},
-        Lγ::Matrix{Float64},
-        lγω::Vector{Float64},
-        lω::Float64,
+        β::Vector{T},
+        τ::Vector{T},
+        Lγ::Matrix{T},
+        lγω::Vector{T},
+        lω::T,
         needgrad::Bool = true
         #y::Vector{Float64},
         #X::Matrix{Float64},
@@ -79,7 +84,7 @@ function MoMobjf!(obs::varlmmObs{T},
             fill!(obs.∇τ, 0)
             fill!(obs.∇Lγ, 0)
             fill!(obs.∇lγω, 0)
-            obs.∇lω = 0.0
+            fill!(obs.∇lω, 0)
         end
 
         #calculate residuals Yi - Xiβ and residual matrix
@@ -98,7 +103,7 @@ function MoMobjf!(obs::varlmmObs{T},
         mul!(obs.storage_qn, transpose(Lγ), transpose(obs.Z))
         mul!(obs.V, transpose(obs.storage_qn), obs.storage_qn)
         mul!(obs.Wτ, obs.W, τ)
-        obs.Wτ = exp.(obs.Wτ)
+        exp!(obs.Wτ)
         for i in 1:n
             @views obs.V[i, i] += eV * obs.Wτ[i] 
         end
@@ -106,7 +111,7 @@ function MoMobjf!(obs::varlmmObs{T},
         #objective function is \sum_i ||(Yi - Xiβ)(Yi - Xiβ)^T - Vi||^2_F
         #BLAS.gemv!('N', 1, ) #to get R, the part inside the objective function 
         #BLAS.gemv!('T', one(T), m.data[i].X, m.data[i].y, one(T), xty)
-        obs.storage_nn = obs.storage_nn - obs.V #this is R_i
+        obs.storage_nn .-= obs.V #this is R_i
         # gemv!(tA, alpha, A, x, beta, y) 
         # Update the vector y as alpha*A*x + beta*y or alpha*A'x + beta*y according to tA. 
         # alpha and beta are scalars. Return the updated y.
@@ -115,36 +120,52 @@ function MoMobjf!(obs::varlmmObs{T},
         #gradient
         if needgrad
             # wrt β
-            mul!(obs.∇β, obs.storage_nn, obs.res)
-            lmul!(transpose(obs.X), obs.∇β)
+            mul!(obs.storage_n1, obs.storage_nn, obs.res)
+            mul!(obs.∇β, transpose(obs.X), obs.storage_n1)
             #BLAS.gemv!('N', -inv(1 + qf), obs.xtz, obs.storage_q2, one(T), obs.∇β)
             obs.∇β .*= -2 #necessary? it's proportional to this 
 
             # wrt τ
-            #obs.∇τ[1] = (n - rss + 2qf / (1 + qf)) / 2τ
-            mul!(obs.∇τ, Diagonal(obs.storage_nn), obs.Wτ)
-            eVsumRiW = -eV * sum(obs.∇τ) #need for gradient wrt Lγ
-            lmul!(transpose(obs.W), obs.∇τ)
+            mul!(obs.storage_n1, Diagonal(obs.storage_nn), obs.Wτ)
+            eVsumRiW = -eV * sum(obs.storage_n1) #need for gradient wrt Lγ
+            mul!(obs.∇τ, transpose(obs.W), obs.storage_n1)
             obs.∇τ .*= -eV 
 
             # wrt Lγ
             # overwrite storage_qn 
             mul!(obs.storage_qn, transpose(obs.Z), obs.storage_nn)
             mul!(obs.storage_qq, obs.storage_qn, obs.Z)
-            rmul!(obs.storage_qq, obs.Lγ)
-            BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.∇Lγ) 
-            copytri!(obs.∇Lγ, 'L')
-            BLAS.gemm!('N', 'N', 1.0, obs.∇Lγ, I + Lγ, -2.0, obs.storage_qq) 
-            obs.∇Lγ = vech(obs.storage_qq)
+            mul!(obs.storage_qq2, obs.storage_qq, Lγ)
+            BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.storage_qq) 
+            copytri!(obs.storage_qq, 'L')
+            BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2) 
+            #obs.∇Lγ = vech(obs.storage_qq) #immutable
+            copyto!(obs.∇Lγ, vech(obs.storage_qq))
 
             # wrt lγω
-            obs.∇lγω = eVsumRiW * (Lγ * lγω  + transpose(Lγ) * lγω + Lγ * transpose(Lγ) * lγω + lγω) 
+            obs.∇lγω .= eVsumRiW * (Lγ * lγω  + transpose(Lγ) * lγω + Lγ * transpose(Lγ) * lγω + lγω) 
+            #BLAS.axpy!(eVsumRiW, Lγ * lγω, obs.∇lγω)
+            #BLAS.axpy!(eVsumRiW, transpose(Lγ) * lγω, obs.∇lγω)
+            #BLAS.axpy!(eVsumRiW, Lγ * transpose(Lγ) * lγω, obs.∇lγω)
+            #BLAS.axpy!(eVsumRiW, lγω, obs.∇lγω)
 
             # wrt lω
-            obs.∇lω = eVsumRiW * lω
+            #obs.∇lω = eVsumRiW * lω #immutable
+            mul!(obs.∇lω, [eVsumRiW], [lω])
             
         end
-    return objvalue
+    return -objvalue
+end
+
+function MoMobjf!(
+    m::varlmmModel{T},
+    needgrad::Bool = true,
+    ) where T <: BlasReal
+    objvalue = 0.0
+    for i = 1:length(m.data)
+        objvalue += MoMobjf!(m.data[i], m.β, m.τ, m.Lγ, m.lγω, m.lω, needgrad)
+    end
+    objvalue
 end
 
 
@@ -156,7 +177,7 @@ function fit!(
     solver=NLopt.NLoptSolver(algorithm=:LN_COBYLA, maxeval=10000)
     )
     p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
-    npar = Int(p + l + (q + 1) * (q + 2) / 2 >> 1)
+    npar = Int(p + l + (q + 1) * (q + 2) / 2)
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect mx has ((q + 1) * (q + 2))/2 values
 
@@ -165,7 +186,7 @@ function fit!(
     ub = fill( Inf, npar)
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, m)
     # starting point
-    par0 = Vector{Float64}(undef, npar)
+    par0 = zeros(npar)
     modelpar_to_optimpar!(par0, m)
     MathProgBase.setwarmstart!(optm, par0)
     #print("after setwarmstart, par0 = ", par0, "\n")
@@ -257,30 +278,21 @@ function MathProgBase.eval_f(
     MoMobjf!(m, m.β, m.τ, m.Lγ, m.lγω, m.lω, true)
 end
 
-# function MathProgBase.eval_grad_f(
-#     m::blblmmModel, 
-#     grad::Vector, 
-#     par::Vector)
-#     p, q = size(m.data[1].X, 2), size(m.data[1].Z, 2)
-#     optimpar_to_modelpar!(m, par)
-#     loglikelihood!(m, true, false)
-#     # gradient wrt β
-#     copyto!(grad, m.∇β)
-#     # gradient wrt log(τ)
-#     grad[p+1] = m.∇τ[1] * m.τ[1]
-#     # gradient wrt L
-#     mul!(m.storage_qq, m.∇Σ, m.ΣL)
-#     offset = p + 2
-#     for j in 1:q
-#         grad[offset] = 2m.storage_qq[j, j] * m.ΣL[j, j]
-#         offset += 1
-#         for i in j+1:q
-#             grad[offset] = 2(m.storage_qq[i, j] + m.storage_qq[j, i])
-#             offset += 1
-#         end
-#     end
-#     nothing
-# end
-
-
-
+function MathProgBase.eval_grad_f(
+    m::varlmmModel, 
+    grad::Vector, 
+    par::Vector)
+    p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
+    optimpar_to_modelpar!(m, par)
+    MoMobjf!(m, true)
+    # gradient wrt β
+    copyto!(grad, m.∇β)
+    # gradient wrt τ
+    copyto!(grad, p + 1, m.∇τ)
+    # gradient wrt Lγ
+    copyto!(grad, p + l + 1, m.∇Lγ)
+    # gradient wrt L
+    copyto!(grad, Int(p + l + q * (q + 1) / 2 + 1), m.∇lγω)
+    grad[end] = m.∇lω
+    nothing
+end

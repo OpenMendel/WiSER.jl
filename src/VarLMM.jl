@@ -27,14 +27,17 @@ struct varlmmObs{T <: BlasReal}
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Lγ::Vector{T}  
     ∇lγω::Vector{T} 
-    ∇lω::T  # gradient wrt L cholesky factor 
+    ∇lω::Vector{T}  # gradient wrt L cholesky factor 
     res::Vector{T}  # residual vector
     #xtx::Matrix{T}  # Xi'Xi (p-by-p)
     #ztz::Matrix{T}  # Zi'Zi (q-by-q)
     #xtz::Matrix{T}  # Xi'Zi (p-by-q)
+    Wτ::Vector{T}   #holds Wτ vector elements
     storage_nn::Matrix{T}
     storage_qn::Matrix{T}
     storage_qq::Matrix{T}
+    storage_n1::Vector{T}
+    storage_qq2::Matrix{T}
     V::Matrix{T}
 end
 #storage_q1::Vector{T}
@@ -54,20 +57,24 @@ function varlmmObs(
     ∇τ  = Vector{T}(undef, l)
     ∇Lγ = Vector{T}(undef, Int((q + 1) * q / 2))
     ∇lγω = Vector{T}(undef, q)
-    ∇lω = zero(T)
+    ∇lω = Vector{T}(undef, 1)
     res = Vector{T}(undef, n)
     #not sure these are needed
     #xtx = transpose(X) * X
     #ztz = transpose(Z) * Z
     #xtz = transpose(X) * Z
+    Wτ = Vector{T}(undef, n)
     storage_nn = Matrix{T}(undef, n, n)
     storage_qn = Matrix{T}(undef, q, n)
     storage_qq = Matrix{T}(undef, q, q)
+    storage_n1 = Vector{T}(undef, n)
+    storage_qq2 = Matrix{T}(undef, q, q)
     V = Matrix{T}(undef, n, n) 
     varlmmObs{T}(y, X, Z, W, 
         ∇β, ∇τ, ∇Lγ, ∇lγω, ∇lω,
-        res, #xtx, ztz, xtz,
-        storage_nn, storage_qn, storage_qq, V)
+        res, Wτ, #xtx, ztz, xtz,
+        storage_nn, storage_qn, storage_qq,
+        storage_n1, storage_qq2, V)
 end
 
 
@@ -86,6 +93,7 @@ struct varlmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     p::Int          # number of mean parameters in linear regression
     q::Int          # number of random effects
     l::Int          # number of parameters for modeling WS variability
+    npar::Int # total number of parameters estimated
     # parameters
     β::Vector{T}    # p-vector of mean regression coefficients
     τ::Vector{T}    # l-vector of WS variability regression coefficients
@@ -97,16 +105,16 @@ struct varlmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     ∇τ::Vector{T}
     ∇Lγ::Vector{T}  
     ∇lγω::Vector{T} 
-    ∇lω::T  # gradient wrt L cholesky factor 
-    Wτ::Vector{T}   #holds Wτ vector elements
-    storage_qq::Matrix{T}
-    storage_nq::Matrix{T}
-    storage_nn::Matrix{T} #to hold matrix to take frobenius norm of
+    ∇lω::Vector{T}  # gradient wrt L cholesky factor 
+    #Wτ::Vector{T}   #holds Wτ vector elements
+    #storage_qq::Matrix{T}
+    #storage_nq::Matrix{T}
+    #storage_nn::Matrix{T} #to hold matrix to take frobenius norm of
 end
 
 function varlmmModel(obsvec::Vector{varlmmObs{T}}) where T <: BlasReal
     n, p, q, l = length(obsvec), size(obsvec[1].X, 2), size(obsvec[1].Z, 2), size(obsvec[1].W, 2)
-    npar = Int(p + l + (q + 1) * (q + 2) / 2 >> 1)
+    npar = Int(p + l + (q + 1) * (q + 2) / 2)
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect q+1^2 values
     ## the arithmetic shift right operation has the effect of division by 2^n, here n = 1
@@ -121,25 +129,24 @@ function varlmmModel(obsvec::Vector{varlmmObs{T}}) where T <: BlasReal
     ∇τ  = Vector{T}(undef, l)
     ∇Lγ = Vector{T}(undef, Int((q + 1) * q / 2)) 
     ∇lγω = Vector{T}(undef, q)
-    ∇lω = zero(T)
+    ∇lω = Vector{T}(undef, 1)
     #Hβ  = Matrix{T}(undef, p, p)
     #Hτ  = Matrix{T}(undef, 1, 1)
     #HΣ  = Matrix{T}(undef, abs2(q), abs2(q))
-    Wτ = Vector{T}(undef, n)
     #XtX = zeros(T, p, p) # sum_i xi'xi
     #ntotal = 0
     #for i in eachindex(obsvec)
     #    ntotal  += length(obsvec[i].y)
     #    XtX    .+= obsvec[i].xtx
     #end
-    storage_qq = Matrix{T}(undef, q, q)
-    storage_nq = Matrix{T}(undef, n, q)
-    storage_nn = Matrix{T}(undef, n, n)
+    #storage_qq = Matrix{T}(undef, q, q)
+    #storage_nq = Matrix{T}(undef, n, q)
+    #storage_nn = Matrix{T}(undef, n, n)
     
-    varlmmModel{T}(obsvec, p, q, l,
+    varlmmModel{T}(obsvec, p, q, l, npar,
         β, τ, Lγ, lγω, lω,
-        ∇β, ∇τ, ∇Lγ, ∇lγω, ∇lω, #∇Σ, #Hβ, Hτ, HΣ, XtX,
-        Wτ, storage_qq, storage_nq, storage_nn)
+        ∇β, ∇τ, ∇Lγ, ∇lγω, ∇lω)#, #∇Σ, #Hβ, Hτ, HΣ, XtX,
+        #Wτ, storage_qq, storage_nq, storage_nn)
 end
 
 
