@@ -92,7 +92,7 @@ function MoMobjf!(obs::varlmmObs{T},
         # V = obs.Z * Lγ * Lγ' * obs.Z' + exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω)) * diag(exp(w_{ij}^T * τ))
         
         #calculate e(Lγ, lγω, lω) = exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω))
-        eV = exp(0.5* (lγω' * lγω + lω^2 + 2 * lγω' * Lγ * lγω + (lγω' * Lγ) * (Lγ' * lγω)))
+        eV = exp(0.5 * (lγω' * lγω + lω^2 + 2 * lγω' * Lγ * lγω + (lγω' * Lγ) * (Lγ' * lγω)))
 
         #calculate rest of Variance
         mul!(obs.storage_qn, transpose(Lγ), transpose(obs.Z))
@@ -156,7 +156,7 @@ function fit!(
     solver=NLopt.NLoptSolver(algorithm=:LN_COBYLA, maxeval=10000)
     )
     p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
-    npar = p + l + (q + 1) * (q + 2) / 2 >> 1
+    npar = Int(p + l + (q + 1) * (q + 2) / 2 >> 1)
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect mx has ((q + 1) * (q + 2))/2 values
 
@@ -202,7 +202,7 @@ function modelpar_to_optimpar!(
     # ?? what is the benefit of cholesky here?
     offset = p + 2
     copyto!(par, p + l + 1, vech(m.Lγ))
-    copyto!(par, p + l + q * (q + 1) / 2 + 1, m.lγω)
+    copyto!(par, Int(p + l + q * (q + 1) / 2 + 1), m.lγω)
     par[end] = m.lω
     #for j in 1:q
     #    par[offset] = log(m.ΣL[j, j]) # only the diagonal is constrained to be nonnegative
