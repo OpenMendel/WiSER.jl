@@ -13,11 +13,21 @@ function vech(a::Union{Number, AbstractVecOrMat})
       aoffset += m + 1
     end
     out
-  end
+end
 # a is a scalar or (column) vector
 vech(a::Union{Number, AbstractVector}) = copy(a)
 
+#gets indicies for diagonal elements of matrix's vech elements (ensure >= 0)
+function diagInds(n::Int)
+    inds = [1]
+    for i in 1:(n - 1)
+        ind = inds[i] + (n - i + 1)
+        push!(inds, ind)
+    end
+    inds
+end
 
+#takes vech object and transforms it to lower triangular matrix
 function vec2ltri(v::AbstractVector{T}, z::T = zero(T)) where {T <: Real}
     n = length(v)
     s = round(Int, (sqrt(8n + 1) - 1) / 2)
@@ -68,7 +78,7 @@ function MoMobjf!(obs::varlmmObs{T},
         τ::Vector{T},
         Lγ::Matrix{T},
         lγω::Vector{T},
-        lω::T,
+        lω::Vector{T},
         needgrad::Bool = true
         #y::Vector{Float64},
         #X::Matrix{Float64},
@@ -78,7 +88,6 @@ function MoMobjf!(obs::varlmmObs{T},
         ) where T <: BlasReal
         objvalue = 0.0
         n, p, q, l = size(obs.X, 1), size(obs.X, 2), size(obs.Z, 2), size(obs.W, 2)
-        fill!(obs.storage_nn, 0)
         if needgrad
             fill!(obs.∇β, 0)
             fill!(obs.∇τ, 0)
@@ -97,7 +106,9 @@ function MoMobjf!(obs::varlmmObs{T},
         # V = obs.Z * Lγ * Lγ' * obs.Z' + exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω)) * diag(exp(w_{ij}^T * τ))
         
         #calculate e(Lγ, lγω, lω) = exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω))
-        eV = exp(0.5 * (lγω' * lγω + lω^2 + 2 * lγω' * Lγ * lγω + (lγω' * Lγ) * (Lγ' * lγω)))
+        eV = exp(0.5 * (lγω' * lγω + lω[1]^2 + 2 * lγω' * Lγ * lγω + (lγω' * Lγ) * (Lγ' * lγω)))
+        #maybe pass this expression in since it contains no data, just parameters
+        #then only have to calculate it once
 
         #calculate rest of Variance
         mul!(obs.storage_qn, transpose(Lγ), transpose(obs.Z))
@@ -151,19 +162,33 @@ function MoMobjf!(obs::varlmmObs{T},
 
             # wrt lω
             #obs.∇lω = eVsumRiW * lω #immutable
-            mul!(obs.∇lω, [eVsumRiW], [lω])
+            mul!(obs.∇lω, [eVsumRiW], lω)
             
         end
-    return -objvalue
+    return objvalue
 end
 
 function MoMobjf!(
     m::varlmmModel{T},
-    needgrad::Bool = true,
+    needgrad::Bool = true
     ) where T <: BlasReal
-    objvalue = 0.0
-    for i = 1:length(m.data)
+    objvalue = zero(T)
+    if needgrad
+        fill!(m.∇β, 0)
+        fill!(m.∇τ, 0)
+        fill!(m.∇Lγ, 0)
+        fill!(m.∇lγω, 0)
+        fill!(m.∇lω, 0)
+    end
+    for i in eachindex(m.data)
         objvalue += MoMobjf!(m.data[i], m.β, m.τ, m.Lγ, m.lγω, m.lω, needgrad)
+        if needgrad
+            m.∇β .+= m.data[i].∇β
+            m.∇τ .+= m.data[i].∇τ
+            m.∇Lγ .+= m.data[i].∇Lγ
+            m.∇lγω .+= m.data[i].∇lγω
+            m.∇lω .+= m.data[i].∇lω
+        end
     end
     objvalue
 end
@@ -173,8 +198,8 @@ end
 function fit!(
     m::varlmmModel,
     #solver=Ipopt.IpoptSolver(print_level=6)
-    #solver=NLopt.NLoptSolver(algorithm=:LN_COBYLA, maxeval=10000)
-    solver=NLopt.NLoptSolver(algorithm=:LN_COBYLA, maxeval=10000)
+    #solver=NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=10000)
+    solver=NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
     )
     p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
     npar = Int(p + l + (q + 1) * (q + 2) / 2)
@@ -183,11 +208,17 @@ function fit!(
 
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar) # error variance should be nonnegative, will fix later
-    ub = fill( Inf, npar)
-    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, m)
+    ub = fill(Inf, npar)
+    # diag elements of Lγ and lω must be > 0
+    nonneginds = diagInds(q) .+ (p + l) #get diag inds of Lγ
+    lb[nonneginds] .= 0
+    lb[end] = 0
+
+    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, m)
+    #MathProgBase.eval_grad_f(m, grad, par0)
     MathProgBase.setwarmstart!(optm, par0)
     #print("after setwarmstart, par0 = ", par0, "\n")
     # optimize
@@ -200,7 +231,7 @@ function fit!(
     # print("after optimize!, after optimpar_to_modelpar!, m.β = ", m.β, "\n")
     # print("after optimize!, after optimpar_to_modelpar!, m.Σ = ", m.Σ, "\n")
     # print("after optimize!, after optimpar_to_modelpar!, m.τ = ", m.τ, "\n")
-    MoMobjf!(m, m.β, m.τ, m.Lγ, m.lγω, m.lω, true)
+    MoMobjf!(m, true)
     m
 end
 
@@ -224,7 +255,7 @@ function modelpar_to_optimpar!(
     offset = p + 2
     copyto!(par, p + l + 1, vech(m.Lγ))
     copyto!(par, Int(p + l + q * (q + 1) / 2 + 1), m.lγω)
-    par[end] = m.lω
+    par[end] = m.lω[1]
     #for j in 1:q
     #    par[offset] = log(m.ΣL[j, j]) # only the diagonal is constrained to be nonnegative
     #    offset += 1
@@ -247,10 +278,10 @@ function optimpar_to_modelpar!(
     p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
     copyto!(m.β, 1, par, 1, p)
     copyto!(m.τ, 1, par, p + 1, l)
-    copyto!(m.Lγ, m.lγω, m.lω)
-    m.Lγ = vec2ltri(par[(p + l + 1): (q * (q + 1) / 2)])
-    copyto!(m.lγω, 1, par, p + l + q * (q + 1) / 2 + 1, q)
-    m.lω = par[end]
+    #copyto!(m.Lγ, m.lγω, m.lω)
+    m.Lγ .= vec2ltri(par[(p + l + 1): p + l + Int((q * (q + 1) / 2))])
+    copyto!(m.lγω, 1, par, Int(p + l + q * (q + 1) / 2 + 1), q)
+    m.lω[1] = par[end]
     #print("optimpar_to_modelpar par = ", par, "\n")
     # copyto!(dest, do, src, so, N)
     # Copy N elements from collection src starting at offset so, 
@@ -275,7 +306,7 @@ function MathProgBase.eval_f(
     m::varlmmModel, 
     par::Vector)
     optimpar_to_modelpar!(m, par)
-    MoMobjf!(m, m.β, m.τ, m.Lγ, m.lγω, m.lω, true)
+    MoMobjf!(m, false)
 end
 
 function MathProgBase.eval_grad_f(
@@ -283,16 +314,17 @@ function MathProgBase.eval_grad_f(
     grad::Vector, 
     par::Vector)
     p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
-    optimpar_to_modelpar!(m, par)
-    MoMobjf!(m, true)
+    optimpar_to_modelpar!(m, par) 
+    obj = MoMobjf!(m, true)
     # gradient wrt β
     copyto!(grad, m.∇β)
     # gradient wrt τ
     copyto!(grad, p + 1, m.∇τ)
     # gradient wrt Lγ
     copyto!(grad, p + l + 1, m.∇Lγ)
-    # gradient wrt L
+    # gradient wrt lγω
     copyto!(grad, Int(p + l + q * (q + 1) / 2 + 1), m.∇lγω)
-    grad[end] = m.∇lω
-    nothing
+    # gradient wrt lω
+    grad[end] = m.∇lω[1]
+    obj
 end

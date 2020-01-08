@@ -44,7 +44,7 @@ end
 #storage_q2::Vector{T}
 # Vchol::Matrix{T}
 
-function varlmmObs(
+function varlmmObs( #ri, Ri, Vi, res 
     y::Vector{T},
     X::Matrix{T},
     Z::Matrix{T},
@@ -99,7 +99,7 @@ struct varlmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     τ::Vector{T}    # l-vector of WS variability regression coefficients
     Lγ::Matrix{T} # q by q lower triangular cholesky factor of random effects  var-covar matrix pertaining to γ
     lγω::Vector{T} # q by 1 cholesky factor of RE covar matrix for γ,ω
-    lω::T        # 1 x 1 cholesky factor of RE variance for ω
+    lω::Vector{T}        # 1 x 1 cholesky factor of RE variance for ω
     # working arrays
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
@@ -124,7 +124,7 @@ function varlmmModel(obsvec::Vector{varlmmObs{T}}) where T <: BlasReal
     τ   = Vector{T}(undef, l)
     Lγ = Matrix{T}(undef, q, q) 
     lγω = Vector{T}(undef, q)
-    lω = zero(T)
+    lω = Vector{T}(undef, 1)
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, l)
     ∇Lγ = Vector{T}(undef, Int((q + 1) * q / 2)) 
