@@ -221,11 +221,10 @@ function MoMobjf!(obs::varlmmObs{T},
             copyto!(obs.∇Lγ, vech(obs.storage_qq2)) #change so vech doesn't create vector (loop)
 
             # wrt lγω
-            obs.∇lγω .= eVsumRiW * (Lγ * lγω  + transpose(Lγ) * lγω + Lγ * transpose(Lγ) * lγω + lγω) 
-            #BLAS.axpy!(eVsumRiW, Lγ * lγω, obs.∇lγω)
-            #BLAS.axpy!(eVsumRiW, transpose(Lγ) * lγω, obs.∇lγω)
-            #BLAS.axpy!(eVsumRiW, Lγ * transpose(Lγ) * lγω, obs.∇lγω)
-            #BLAS.axpy!(eVsumRiW, lγω, obs.∇lγω)
+            BLAS.axpy!(eVsumRiW, Lγ * lγω, obs.∇lγω)
+            BLAS.axpy!(eVsumRiW, transpose(Lγ) * lγω, obs.∇lγω)
+            BLAS.axpy!(eVsumRiW, Lγ * transpose(Lγ) * lγω, obs.∇lγω)
+            BLAS.axpy!(eVsumRiW, lγω, obs.∇lγω)
 
             # wrt lω
             #obs.∇lω = eVsumRiW * lω #immutable
