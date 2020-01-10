@@ -114,7 +114,7 @@ end
 
 function varlmmModel(obsvec::Vector{varlmmObs{T}}) where T <: BlasReal
     n, p, q, l = length(obsvec), size(obsvec[1].X, 2), size(obsvec[1].Z, 2), size(obsvec[1].W, 2)
-    npar = Int(p + l + (q + 1) * (q + 2) / 2)
+    npar = p + l + ((q + 1) * (q + 2)) >> 1
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect q+1^2 values
     ## the arithmetic shift right operation has the effect of division by 2^n, here n = 1
@@ -122,9 +122,12 @@ function varlmmModel(obsvec::Vector{varlmmObs{T}}) where T <: BlasReal
     #w   = ones(T, n) # initialize weights to be 1
     β   = Vector{T}(undef, p)
     τ   = Vector{T}(undef, l)
-    Lγ = Matrix{T}(undef, q, q) 
-    lγω = Vector{T}(undef, q)
-    lω = Vector{T}(undef, 1)
+    #Lγ = Matrix{T}(undef, q, q) 
+    Lγ = Matrix{T}(I, q, q)
+    #lγω = Vector{T}(undef, q)
+    lγω = ones(T, q)
+    #lω = Vector{T}(undef, 1)
+    lω = ones(T, 1)
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, l)
     ∇Lγ = Vector{T}(undef, Int((q + 1) * q / 2)) 
