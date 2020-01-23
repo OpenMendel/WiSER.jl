@@ -32,6 +32,55 @@ function vech!(v::Union{Number, AbstractVector},
     end
 end
 
+#evaluates the variance constant
+#e(Lγ, lγω, lω) = exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω))
+function varconst(Lγ, lγω, lω)
+    v1 = BLAS.gemv('T', Lγ, lγω)
+    v2 = BLAS.gemv('N', Lγ, lγω)
+    return exp(0.5(sum(abs2, lγω) + lω[1]^2 + 2 * dot(lγω, v2) + sum(abs2, v1)))
+end
+
+"""
+init_β!(m)
+Initialize the linear regression parameters `β` and `τ` by the least 
+squares solutions.
+"""
+function init_β!(
+    m::varlmmModel{T}
+    ) where T <: BlasReal
+    # accumulate sufficient statistics X'y
+    xty = zeros(T, m.p)
+    xtx = zeros(T, m.p, m.p)
+    npeople = length(m.data)
+    meanw = zeros(T, m.l)
+    wtlogvary = zeros(T, m.l)
+    wtw = zeros(T, m.l, m.l)
+
+    for i in eachindex(m.data)
+        BLAS.gemv!('T', one(T), m.data[i].X, m.data[i].y, one(T), xty)
+        BLAS.syrk!('U', 'T', one(T), m.data[i].X, one(T), xtx)
+        meanw = mean(m.data[i].W, dims = [1])
+        # or fill!(logvary, log(var(m.data[i].y)))
+        #BLAS.gemv!('T', one(T), meanw, log(var(m.data[i].y)), one(T), wtlogvary)
+        BLAS.axpy!(log(var(m.data[i].y)), meanw, wtlogvary)
+        BLAS.syrk!('U', 'T', one(T), meanw, one(T), wtw)
+    end
+    # least square solution for β
+    ldiv!(m.β, cholesky(Symmetric(xtx)), xty)
+    # ldiv!(Y, A, B) -> Y
+    # Compute A \ B in-place and store the result in Y, returning the result.
+    # The argument A should not be a matrix. 
+    # Rather, instead of matrices it should be a factorization object (e.g. produced by factorize or cholesky). 
+    # The reason for this is that factorization itself is both expensive and typically allocates memory 
+    # (although it can also be done in-place via, e.g., lu!), 
+    # and performance-critical situations requiring ldiv! usually also require fine-grained control 
+    # over the factorization of A.
+
+    #estimate τ by W'W \ logvar(y)
+    #average over W or replicate logvar y n times?
+    ldiv!(m.τ, cholesky(Symmetric(wtw)), wtlogvary)
+end
+
 #gets indicies for diagonal elements of matrix's vech elements (ensure >= 0)
 function diagInds(n::Int)
     inds = [1]
@@ -116,7 +165,9 @@ julia> exp!(x)
  3.0
 """
 function exp!(x::Array{T}) where T <: BlasReal
-    copyto!(x, exp.(x))
+    for i in eachindex(x)
+        x[i] = exp(x[i])
+    end
 end
 
 """
@@ -174,7 +225,7 @@ function MoMobjf!(obs::varlmmObs{T},
         #calculate e(Lγ, lγω, lω) = exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω))
         # If not precalculated and input
         if eV == Inf
-            eV = exp(0.5 * (lγω' * lγω + lω[1]^2 + 2 * lγω' * Lγ * lγω + (lγω' * Lγ) * (Lγ' * lγω)))
+            eV = varconst(Lγ, lγω, lω)
         end
         #maybe pass this expression in since it contains no data, just parameters
         #then only have to calculate it once
@@ -202,7 +253,7 @@ function MoMobjf!(obs::varlmmObs{T},
             # wrt β
             mul!(obs.storage_n1, obs.storage_nn, obs.res)
             mul!(obs.∇β, transpose(obs.X), obs.storage_n1)
-            obs.∇β .*= -2 #necessary? it's proportional to this 
+            obs.∇β .*= -2 
 
             # wrt τ
             mul!(obs.storage_n1, Diagonal(obs.storage_nn), obs.Wτ)
@@ -218,8 +269,8 @@ function MoMobjf!(obs::varlmmObs{T},
             BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.storage_qq) 
             copytri!(obs.storage_qq, 'L')
             BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2) 
-            copyto!(obs.∇Lγ, vech(obs.storage_qq2)) #change so vech doesn't create vector (loop)
-
+            #copyto!(obs.∇Lγ, vech(obs.storage_qq2)) #change so vech! doesn't create vector (loop)
+            vech!(obs.∇Lγ, obs.storage_qq2)
             # wrt lγω
             BLAS.axpy!(eVsumRiW, Lγ * lγω, obs.∇lγω)
             BLAS.axpy!(eVsumRiW, transpose(Lγ) * lγω, obs.∇lγω)
@@ -247,8 +298,7 @@ function MoMobjf!(
     end
     #calculate e(Lγ, lγω, lω) = exp(1/2(lγω'lγω + lω^2 + 2lγω'Lγlγω + lγω'Lγ Lγ' lγω))
     #same for every observation (no data, only parameters)
-    eV = exp(0.5 * (m.lγω' * m.lγω + m.lω[1]^2 + 
-        2 * m.lγω' * m.Lγ * m.lγω + (m.lγω' * m.Lγ) * (m.Lγ' * m.lγω)))
+    eV = varconst(m.Lγ, m.lγω, m.lω)
     for i in eachindex(m.data)
         objvalue += MoMobjf!(m.data[i], m.β, m.τ, m.Lγ, m.lγω, m.lω, eV, needgrad)
         if needgrad
@@ -274,20 +324,15 @@ function fit!(
     npar = p + l + ((q + 1) * (q + 2)) >> 1
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect mx has ((q + 1) * (q + 2))/2 values
-
+    init_β!(m) 
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar) # error variance should be nonnegative, will fix later
     ub = fill(Inf, npar)
-    # diag elements of Lγ and lω must be > 0
-    #nonneginds = diagInds(q) .+ (p + l) #get diag inds of Lγ
-    #lb[nonneginds] .= 0
-    #lb[end] = 0
 
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, m)
-    #MathProgBase.eval_grad_f(m, grad, par0)
     MathProgBase.setwarmstart!(optm, par0)
     #print("after setwarmstart, par0 = ", par0, "\n")
     # optimize

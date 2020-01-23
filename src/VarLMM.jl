@@ -1,6 +1,6 @@
 module VarLMM
 
-using LinearAlgebra, MathProgBase, Reexport, Random, Distributions#, MixedModels
+using LinearAlgebra, MathProgBase, Reexport, Distributions, Statistics
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
