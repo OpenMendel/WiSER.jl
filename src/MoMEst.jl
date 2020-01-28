@@ -41,17 +41,16 @@ function varconst(Lγ, lγω, lω)
 end
 
 """
-init_β!(m)
+init_β_τ!(m)
 Initialize the linear regression parameters `β` and `τ` by the least 
 squares solutions.
 """
-function init_β!(
+function init_β_τ!(
     m::varlmmModel{T}
     ) where T <: BlasReal
     # accumulate sufficient statistics X'y
     xty = zeros(T, m.p)
     xtx = zeros(T, m.p, m.p)
-    npeople = length(m.data)
     meanw = zeros(T, m.l)
     wtlogvary = zeros(T, m.l)
     wtw = zeros(T, m.l, m.l)
@@ -263,23 +262,33 @@ function MoMobjf!(obs::varlmmObs{T},
 
             # wrt Lγ
             # overwrite storage_qn 
-            mul!(obs.storage_qn, transpose(obs.Z), obs.storage_nn)
-            mul!(obs.storage_qq, obs.storage_qn, obs.Z)
-            mul!(obs.storage_qq2, obs.storage_qq, Lγ)
-            BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.storage_qq) 
-            copytri!(obs.storage_qq, 'L')
-            BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2) 
-            #copyto!(obs.∇Lγ, vech(obs.storage_qq2)) #change so vech! doesn't create vector (loop)
+            #BLAS.gemm!('T', 'N', one(T), obs.Z, obs.storage_nn, zero(T), obs.storage_qn)
+            #mul!(obs.storage_qn, transpose(obs.Z), obs.storage_nn)
+            #mul!(obs.storage_qq, obs.storage_qn, obs.Z)
+            #mul!(obs.storage_qq2, obs.storage_qq, Lγ)
+            #BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.storage_qq) 
+            #copytri!(obs.storage_qq, 'L')
+            #BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2) 
+            #vech!(obs.∇Lγ, obs.storage_qq2)
+
+            #BLAS.gemm!('T', 'N', one(T), obs.Z, obs.storage_nn, zero(T), obs.storage_qn)
+            BLAS.gemm!('N', 'N', one(T), obs.storage_qn, obs.Z, zero(T), obs.storage_qq)
+            BLAS.gemm!('N', 'N', one(T), obs.storage_qn, obs.Z, one(T), obs.storage_qq)
+            BLAS.gemm!('N', 'N', one(T), obs.storage_qq, Lγ, one(T), obs.storage_qq2)
+            BLAS.gemm!('N', 'T', eVsumRiW, lγω, lγω, zero(T), obs.storage_qq)
+            BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2)
+            #BLAS.axpy!(one(T)) q x 1 improvement herer
             vech!(obs.∇Lγ, obs.storage_qq2)
+
             # wrt lγω
-            BLAS.axpy!(eVsumRiW, Lγ * lγω, obs.∇lγω)
-            BLAS.axpy!(eVsumRiW, transpose(Lγ) * lγω, obs.∇lγω)
-            BLAS.axpy!(eVsumRiW, Lγ * transpose(Lγ) * lγω, obs.∇lγω)
+            BLAS.gemv!('N', eVsumRiW, Lγ, lγω, one(T), obs.∇lγω)
+            BLAS.gemv!('T', eVsumRiW, Lγ, lγω, one(T), obs.∇lγω)
+            BLAS.gemm!('T', 'N', eVsumRiW, Lγ, Lγ, zero(T), obs.storage_qq)
+            BLAS.gemv!('N', one(T), obs.storage_qq, lγω, one(T), obs.∇lγω)
             BLAS.axpy!(eVsumRiW, lγω, obs.∇lγω)
 
             # wrt lω
-            #obs.∇lω = eVsumRiW * lω #immutable
-            mul!(obs.∇lω, [eVsumRiW], lω)
+            BLAS.axpy!(eVsumRiW, lω, obs.∇lω)
         end
     return objvalue
 end
@@ -324,7 +333,7 @@ function fit!(
     npar = p + l + ((q + 1) * (q + 2)) >> 1
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect mx has ((q + 1) * (q + 2))/2 values
-    init_β!(m) 
+    init_β_τ!(m) 
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar) # error variance should be nonnegative, will fix later
     ub = fill(Inf, npar)
