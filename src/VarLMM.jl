@@ -7,7 +7,7 @@ using LinearAlgebra: BlasReal, copytri!
 #@reexport using MixedModels
 
 export varlmmObs, varlmmModel
-export fit!, MoMobjf!
+export fit!, MoMobjf!, init_β_τ!, vech!, vec2ltri!
 
 
 """

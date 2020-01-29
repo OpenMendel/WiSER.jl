@@ -263,22 +263,22 @@ function MoMobjf!(obs::varlmmObs{T},
             # wrt Lγ
             # overwrite storage_qn 
             #BLAS.gemm!('T', 'N', one(T), obs.Z, obs.storage_nn, zero(T), obs.storage_qn)
-            #mul!(obs.storage_qn, transpose(obs.Z), obs.storage_nn)
-            #mul!(obs.storage_qq, obs.storage_qn, obs.Z)
-            #mul!(obs.storage_qq2, obs.storage_qq, Lγ)
-            #BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.storage_qq) 
-            #copytri!(obs.storage_qq, 'L')
-            #BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2) 
-            #vech!(obs.∇Lγ, obs.storage_qq2)
+            mul!(obs.storage_qn, transpose(obs.Z), obs.storage_nn)
+            mul!(obs.storage_qq, obs.storage_qn, obs.Z)
+            mul!(obs.storage_qq2, obs.storage_qq, Lγ)
+            BLAS.syrk!('L', 'N', eVsumRiW, lγω, 0.0, obs.storage_qq) 
+            copytri!(obs.storage_qq, 'L')
+            BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2) 
+            vech!(obs.∇Lγ, obs.storage_qq2)
 
             #BLAS.gemm!('T', 'N', one(T), obs.Z, obs.storage_nn, zero(T), obs.storage_qn)
-            BLAS.gemm!('N', 'N', one(T), obs.storage_qn, obs.Z, zero(T), obs.storage_qq)
-            BLAS.gemm!('N', 'N', one(T), obs.storage_qn, obs.Z, one(T), obs.storage_qq)
-            BLAS.gemm!('N', 'N', one(T), obs.storage_qq, Lγ, one(T), obs.storage_qq2)
-            BLAS.gemm!('N', 'T', eVsumRiW, lγω, lγω, zero(T), obs.storage_qq)
-            BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2)
+            # BLAS.gemm!('N', 'N', one(T), obs.storage_qn, obs.Z, zero(T), obs.storage_qq)
+            # BLAS.gemm!('N', 'N', one(T), obs.storage_qn, obs.Z, one(T), obs.storage_qq)
+            # BLAS.gemm!('N', 'N', one(T), obs.storage_qq, Lγ, one(T), obs.storage_qq2)
+            # BLAS.gemm!('N', 'T', eVsumRiW, lγω, lγω, zero(T), obs.storage_qq)
+            # BLAS.gemm!('N', 'N', 1.0, obs.storage_qq, I + Lγ, -2.0, obs.storage_qq2)
             #BLAS.axpy!(one(T)) q x 1 improvement herer
-            vech!(obs.∇Lγ, obs.storage_qq2)
+            # vech!(obs.∇Lγ, obs.storage_qq2)
 
             # wrt lγω
             BLAS.gemv!('N', eVsumRiW, Lγ, lγω, one(T), obs.∇lγω)
@@ -373,7 +373,7 @@ function modelpar_to_optimpar!(
     for ind in nonnegInds
         par[ind] = log(par[ind])
     end
-    copyto!(par, p + l + 1 + q * (q + 1) >> 1, m.lγω)
+    copyto!(par, p + l + 1 + (q * (q + 1)) >> 1, m.lγω)
     par[end] = log(m.lω[1])
     par
     #print("modelpar_to_optimpar par = ", par, "\n")
@@ -389,12 +389,12 @@ function optimpar_to_modelpar!(
     p, q, l = size(m.data[1].X, 2), size(m.data[1].Z, 2), size(m.data[1].W, 2)
     copyto!(m.β, 1, par, 1, p)
     copyto!(m.τ, 1, par, p + 1, l)
-    vec2ltri!(m.Lγ, @views par[(p + l + 1): p + l + q * (q + 1) >> 1])
+    vec2ltri!(m.Lγ, @views par[(p + l + 1): p + l + (q * (q + 1)) >> 1])
     #exponentiate diagonals of m.Lγ to recover positivity constraint
     for i in 1:q
         m.Lγ[i, i] = exp(m.Lγ[i, i])
     end
-    copyto!(m.lγω, 1, par, p + l + 1 + q * (q + 1) >> 1, q)
+    copyto!(m.lγω, 1, par, p + l + 1 + (q * (q + 1)) >> 1, q)
     m.lω[1] = exp(par[end])
     m
 end
@@ -437,7 +437,7 @@ function MathProgBase.eval_grad_f(
         grad[nonnegInds[i]] *= m.Lγ[i, i]
     end
     # gradient wrt lγω
-    copyto!(grad, p + l + 1 + q * (q + 1) >> 1, m.∇lγω)
+    copyto!(grad, p + l + 1 + (q * (q + 1)) >> 1, m.∇lγω)
     # gradient wrt lω
     grad[end] = m.∇lω[1] * m.lω[1] #log(grad) chain rule term
     obj
