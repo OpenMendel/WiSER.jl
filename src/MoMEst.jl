@@ -333,7 +333,7 @@ function fit!(
     npar = p + l + ((q + 1) * (q + 2)) >> 1
     # since X includes a column of 1, p is the number of mean parameters
     # the cholesky factor for the q+1xq+1 random effect mx has ((q + 1) * (q + 2))/2 values
-    init_β_τ!(m) 
+    #init_β_τ!(m) 
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar) # error variance should be nonnegative, will fix later
     ub = fill(Inf, npar)
@@ -440,5 +440,12 @@ function MathProgBase.eval_grad_f(
     copyto!(grad, p + l + 1 + (q * (q + 1)) >> 1, m.∇lγω)
     # gradient wrt lω
     grad[end] = m.∇lω[1] * m.lω[1] #log(grad) chain rule term
-    obj
+    grad
+end
+
+function MathProgBase.eval_g(
+    m::varlmmModel,
+    g::Vector, 
+    par::Vector)
+    fill!(g, 0)
 end
