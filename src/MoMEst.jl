@@ -131,8 +131,12 @@ function update_res!(
     obs::varlmmObs{T}, 
     β::Vector{T}
     ) where T <: BlasReal
-    copyto!(obs.res, obs.y)
-    BLAS.gemv!('N', -one(T), obs.X, β, one(T), obs.res) # obs.res - obs.X * β = obs.y - obs.X * β
+    #copyto!(obs.res, obs.y)
+    for i in eachindex(obs.y)
+        obs.res[i] = obs.y[i] - dot(view(obs.X, i, :), β)
+    end
+    #BLAS.gemv!('N', -one(T), obs.X, β, one(T), obs.res) # obs.res - obs.X * β = obs.y - obs.X * β
+    #obs.res = obs.y - obs.X * β
     obs.res
 end
 
@@ -293,6 +297,20 @@ function MoMobjf!(obs::varlmmObs{T},
     return objvalue
 end
 
+"""
+Update model Lγ from MixedModel's fit
+"""
+function extractLγ!(m::varlmmModel{T},
+    mixedL::LinearAlgebra.LowerTriangular{T, Array{T,2}},
+    sigma::T
+    ) where T <: BlasReal
+    for j in 1:m.q
+        for i in 1:m.q
+           j <= i ? m.Lγ[i, j] = sigma * mixedL[i, j] : continue
+        end
+    end
+end
+
 function MoMobjf!(
     m::varlmmModel{T},
     needgrad::Bool = true
@@ -337,7 +355,11 @@ function fit!(
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar) # error variance should be nonnegative, will fix later
     ub = fill(Inf, npar)
+    copyto!(ub, p + l + 1 + (q * (q + 1)) >> 1, zeros(Float64, q))
+    copyto!(lb, p + l + 1 + (q * (q + 1)) >>  1, zeros(Float64, q))
 
+    lb[end] = -Inf
+    ub[end] = -Inf
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
