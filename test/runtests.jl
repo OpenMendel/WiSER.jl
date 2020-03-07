@@ -1,5 +1,5 @@
 module PkgTest
 
-include("MoMtest.jl")
+include("mom_test.jl")
 
 end # PkgTest module
