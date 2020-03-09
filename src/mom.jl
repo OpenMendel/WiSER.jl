@@ -69,7 +69,7 @@ function mom_obj!(
         BLAS.symm!('L', 'U', T(1), obs.R, obs.Z, T(0), obs.storage_nq)
         mul!(obs.storage_qq, transpose(obs.Z), obs.storage_nq)
         # mul!(obs.∇Lγ, obs.storage_qq, Lγ)
-        # BLAS utilizing triangular property is slower than following line
+        # BLAS utilizing triangular property may be slower for small q
         copy!(obs.∇Lγ, obs.storage_qq)
         BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.∇Lγ)
         

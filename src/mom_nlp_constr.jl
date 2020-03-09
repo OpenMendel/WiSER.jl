@@ -112,7 +112,7 @@ function MathProgBase.eval_grad_f(
     )
     p, q, l = m.p, m.q, m.l
     optimpar_to_modelpar!(m, par) 
-    mom_obj!(m, true)
+    obj = mom_obj!(m, true)
     # gradient wrt β
     copyto!(grad, m.∇β)
     # gradient wrt τ
@@ -127,5 +127,8 @@ function MathProgBase.eval_grad_f(
     copyto!(grad, offset, m.∇lγω)
     # gradient wrt lω
     grad[end] = m.∇lω[1]
-    nothing
+    obj
 end
+
+MathProgBase.eval_g(m::VarLmmModel, g, par) = fill!(g, 0)
+

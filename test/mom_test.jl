@@ -57,9 +57,9 @@ vlmm = VarLmmModel(obsvec)
 # set parameter values to be the truth
 @show copy!(vlmm.β, βtrue)
 @show copy!(vlmm.τ, τtrue)
-@show vlmm.Lγ   .= Lγω[1:end-1, 1:end-1]
-@show vlmm.lγω  .= Lγω[    end, 1:end-1]
-@show vlmm.lω[1] = Lγω[    end,     end]
+vlmm.Lγ   .= Lγω[1:q, 1:q]
+vlmm.lγω  .= Lγω[end, 1:q]
+vlmm.lω[1] = Lγω[end, end]
 # evaluate objective (at truth)
 mgfγω = mgf_γω(vlmm)
 @test mgfγω == 1 # restrictive model
@@ -78,43 +78,46 @@ mgfγω = mgf_γω(vlmm)
 # display(bm)
 # @test allocs(bm) == 0
 bm = @benchmark mom_obj!($vlmm, true)
-display(bm)
+display(bm); println()
 @test allocs(bm) == 0
 end
 
 @testset "fit! (start from truth)" begin
-# solver = KNITRO.KnitroSolver(outlev=KNITRO.KN_OUTLEV_ALL)
-solver = Ipopt.IpoptSolver(print_level=3)
-# solver = NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=4000)
-# solver = NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000)
-# solver = NLopt.NLoptSolver(algorithm=:LD_LBFGS, maxeval=4000)
-# solver = NLopt.NLoptSolver(algorithm=:LN_BOBYQA, maxeval=10000)
-@show solver
-# re-set starting point to truth
-copy!(vlmm.β, βtrue)
-copy!(vlmm.τ, τtrue)
-vlmm.Lγ   .= Lγω[1:q, 1:q]
-vlmm.lγω  .= Lγω[end, 1:q]
-vlmm.lω[1] = Lγω[end, end]
-# fit
-@info "obj at starting point"
-@show mom_obj!(vlmm)
-@show vlmm.β
-@show vlmm.τ
-@show vlmm.Lγ
-@show vlmm.lγω
-@show vlmm.lω
-@time fit!(vlmm, solver)
-@info "obj at solution"
-@show mom_obj!(vlmm)
-@show vlmm.β
-@show vlmm.τ
-@show vlmm.Lγ
-@show vlmm.lγω
-@show vlmm.lω
-@show vlmm.∇β
-@show vlmm.∇τ
-@show vlmm.∇Lγ
-@show vlmm.∇lγω
-@show vlmm.∇lω
+for solver in [
+    KNITRO.KnitroSolver(outlev=0) # outlev 0-6
+    Ipopt.IpoptSolver(print_level=0)
+    # NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=4000)
+    # NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000)
+    # NLopt.NLoptSolver(algorithm=:LD_LBFGS, maxeval=4000)
+    # NLopt.NLoptSolver(algorithm=:LN_BOBYQA, maxeval=10000)
+    ]
+    @show solver
+    # re-set starting point to truth
+    copy!(vlmm.β, βtrue)
+    copy!(vlmm.τ, τtrue)
+    vlmm.Lγ   .= Lγω[1:q, 1:q]
+    vlmm.lγω  .= Lγω[end, 1:q]
+    vlmm.lω[1] = Lγω[end, end]
+    # fit
+    @info "obj at starting point"
+    @show mom_obj!(vlmm)
+    @time fit!(vlmm, solver)
+    @info "obj at solution"
+    @show mom_obj!(vlmm)
+    @info "estimates at solution"
+    println("β")
+    display([βtrue vlmm.β]); println()
+    println("τ")
+    display([τtrue vlmm.τ]); println()
+    println("Lγω")
+    display([vlmm.Lγ zeros(q); vlmm.lγω' vlmm.lω[1]]); println()
+    display(Lγω); println()
+    @info "gradient at solution"
+    println("∇β")
+    @show vlmm.∇β
+    println("∇τ")
+    @show vlmm.∇τ
+    println("∇Lγω")
+    display([vlmm.∇Lγ zeros(q); vlmm.∇lγω' vlmm.∇lω[1]]); println()
+end
 end
