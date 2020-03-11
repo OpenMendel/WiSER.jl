@@ -126,3 +126,5 @@ function MathProgBase.eval_grad_f(
     grad[end] = m.∇lω[1] * m.lω[1] #log(grad) chain rule term
     nothing
 end
+
+MathProgBase.eval_g(m::VarLmmModel, g, par) = fill!(g, 0)
