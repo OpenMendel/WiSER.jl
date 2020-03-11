@@ -1,13 +1,14 @@
 module VarLMM
 
-using Distributions, KNITRO, LinearAlgebra, MathProgBase, MixedModels
+using DataFrames, Distributions, KNITRO, LinearAlgebra, MathProgBase, MixedModels
 using Reexport, Statistics, StatsModels
 import LinearAlgebra: BlasReal, copytri!
+import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
 
 export VarLmmObs, VarLmmModel
-export fit!, mom_obj!, mgf_γω#, MoMobjf!, init_β_τ!, vech!, vec2ltri!
+export DataFrame, fit!, mom_obj!, mgf_γω
 
 """
     VarLmmObs
@@ -147,5 +148,6 @@ end
 include("mom.jl")
 include("mom_nlp_constr.jl")
 # include("mom_nlp_unconstr.jl")
+include("df.jl")
 
 end
