@@ -1,7 +1,7 @@
 module VarLMM
 
 using DataFrames, Distributions, KNITRO, LinearAlgebra, MathProgBase, MixedModels
-using Reexport, Statistics, StatsModels
+using Reexport, Statistics, StatsModels, LsqFit
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
@@ -143,7 +143,76 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
         storage_q)
 end
 
-# TODO: constructor from dataframe as in previous code
+function VarLmmModel(
+    f1::FormulaTerm, # formula for mean with random effects 
+    f2::FormulaTerm, # formula for WS variance
+    df, # dataframe containing all variables
+    idvar::Union{Symbol, String}) # contains ID var)
+
+    # read in dataframe
+    # fit model
+    # create varLMMobs and model
+    # set parameters to the fit model
+
+    lmm = LinearMixedModel(f1, df)
+    MixedModels.fit!(lmm, REML=true)
+    Z = copy(transpose(first(lmm.reterms).z))
+
+    if typeof(idvar) <: String
+        idvar = Symbol(idvar)
+    end
+
+    ids = unique(df[!, idvar])
+    npeople = length(ids)
+    ntotal = size(Z, 1)
+    obsvec = Vector{VarLmmObs{Float64}}(undef, npeople)
+    W = modelmatrix(f2, df) 
+    for i in eachindex(ids)
+        pinds = findall(df[!, idvar] .== ids[i])
+        obs = VarLmmObs(lmm.y[pinds], 
+        lmm.X[pinds, :], 
+        Z[pinds, :], 
+        W[pinds, :])
+        obsvec[i] = obs
+    end
+    model = VarLmmModel(obsvec)
+
+    #update model params with LMM-fitted params
+    model.β .= lmm.beta 
+    update_res!(model)
+    @inbounds for j in 1:model.q, i in j:model.q
+        model.Lγ[i, j] = first(lmm.lambda)[i, j] * lmm.sigma
+    end
+    model.lγω .= zeros(Float64, model.q)
+
+
+    ## set τ[1] to 2log(lmm.sigma), rest 0
+    model.τ .= zeros(Float64, model.l)
+    model.τ[1] = 2log(lmm.sigma)
+    
+    ## use NLS on d_is 
+    
+    Σ = model.Lγ * transpose(model.Lγ)
+    d = Vector{Float64}(undef, ntotal)
+    start = 1
+    for i in 1:length(model.data)
+        ni = length(model.data[i].y)
+        stop = start + ni - 1
+        d[start:stop] = model.data[i].res.^2 - 
+           diag(model.data[i].Z * Σ * 
+           transpose(model.data[i].Z))
+        start = stop + 1
+    end
+    multimodel(W, τmod) = exp.(W * τmod)
+    nls = curve_fit(multimodel, W, d, model.τ)
+    copy!(model.τ, nls.param)
+    
+    #set lω to 0.0
+    model.lω[1] = 0.0
+
+    return model
+end
+
 
 include("mom.jl")
 include("mom_nlp_constr.jl")
