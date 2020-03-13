@@ -46,12 +46,12 @@ function modelpar_to_optimpar!(
     # Lγ
     offset = p + l + 1
     @inbounds for j in 1:q, i in j:q
-        par[offset] = i == j ? log(m.Lγ[i, j]) : m.Lγ[i, j]
+        par[offset] = i == j ? m.Lγ[i, j] == 0.0 ? -1e19 : log(m.Lγ[i, j]) : m.Lγ[i, j]
         offset += 1
     end
     # lγω, lω
     copyto!(par, offset, m.lγω)
-    par[end] = log(m.lω[1])
+    par[end] = m.lω[1] == 0.0 ? -1e19 : log(m.lω[1])
     par
 end
 

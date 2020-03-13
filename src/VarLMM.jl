@@ -215,8 +215,8 @@ end
 
 
 include("mom.jl")
-include("mom_nlp_constr.jl")
-# include("mom_nlp_unconstr.jl")
+#include("mom_nlp_constr.jl")
+include("mom_nlp_unconstr.jl")
 include("df.jl")
 
 end
