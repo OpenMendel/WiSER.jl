@@ -14,13 +14,15 @@ obsvec = Vector{VarLmmObs{Float64}}(undef, m)
 βtrue = [0.1; 6.5; -3.5; 1.0; 5]
 τtrue = [1.5; -1.0; 0.5]
 Σγ    = [2.0 0.0; 0.0 1.2]
-δγω   = [0.0; 0.0] # restrictive model
-σω    = [1.0]
-Σγω   = [Σγ δγω; δγω' σω]
-Lγω   = cholesky(Symmetric(Σγω), check = false).L
+Lγ    = cholesky(Symmetric(Σγ), check = false).L
+αω    = 3.0 # ωi ∼ InvGamma(α, β) 
+βω    = 1.0 # α needs >2 for variance to exist
+ωdist = InverseGamma(αω, βω)
+@show Distributions.mean(ωdist)
+@show Distributions.var(ωdist)
 # generate data
-γω = Vector{Float64}(undef, q + 1)
-z  = similar(γω) # hold vector of iid std normal
+γ = Vector{Float64}(undef, q)
+z  = similar(γ) # hold vector of iid std normal
 for i in 1:m
     # first column intercept, remaining entries iid std normal
     X = Matrix{Float64}(undef, ns[i], p)
@@ -34,12 +36,12 @@ for i in 1:m
     W = Matrix{Float64}(undef, ns[i], l)
     W[:, 1] .= 1
     @views Distributions.rand!(Normal(), W[:, 2:l])
-    # generate random effects: γω = Lγω * z
-    mul!(γω, Lγω, Distributions.rand!(Normal(), z))
+    # generate random effects: γ = Lγ * z
+    mul!(γ, Lγ, Distributions.rand!(Normal(), z))
     # @test γω[end] == 0
     # generate y
-    μy = X * βtrue + Z * γω[1:q]
-    @views vy = exp.(W * τtrue .+ dot(γω[1:q], Lγω[end, 1:q]) .+ γω[end])
+    μy = X * βtrue + Z * γ
+    @views vy = exp.(W * τtrue) * rand(ωdist)
     y = rand(MvNormal(μy, Diagonal(vy)))
     # form a VarLmmObs instance
     obsvec[i] = VarLmmObs(y, X, Z, W)
@@ -167,9 +169,9 @@ for solver in [
     display([βtrue vlmm.β]); println()
     println("τ")
     display([τtrue vlmm.τ]); println()
-    println("Lγω")
-    display([vlmm.Lγ zeros(q); vlmm.lγω' vlmm.lω[1]]); println()
-    display(Lγω); println()
+    println("Lγ")
+    display(vlmm.Lγ); println()
+    display(Lγ); println()
     @info "gradient at solution"
     @show vlmm.∇β
     @show vlmm.∇τ

@@ -17,7 +17,9 @@ function fit!(
         (i == j) && (lb[offset] = 0)
         offset += 1
     end
+    # let's constrained \sigma^2_\omega to be 0 (double robustness)
     lb[end] = 0
+    ub[end] = 0 
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
