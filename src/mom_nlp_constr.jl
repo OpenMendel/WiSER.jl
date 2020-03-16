@@ -17,9 +17,8 @@ function fit!(
         (i == j) && (lb[offset] = 0)
         offset += 1
     end
-    # let's constrained \sigma^2_\omega to be 0 (double robustness)
-    lb[end] = 0
-    ub[end] = 0 
+    # lb[1:p] .= m.β
+    # ub[1:p] .= m.β
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
@@ -54,9 +53,6 @@ function modelpar_to_optimpar!(
         par[offset] = m.Lγ[i, j]
         offset += 1
     end
-    # lγω, lω
-    copyto!(par, offset, m.lγω)
-    par[end] = m.lω[1]
     par
 end
 
@@ -80,9 +76,6 @@ function optimpar_to_modelpar!(
         m.Lγ[i, j] = par[offset]
         offset += 1
     end
-    # lγω, lω
-    copyto!(m.lγω, 1, par, offset, q)
-    m.lω[1] = par[end]
     m
 end
 
@@ -125,12 +118,7 @@ function MathProgBase.eval_grad_f(
         grad[offset] = m.∇Lγ[i, j]
         offset += 1
     end
-    # gradient wrt lγω
-    copyto!(grad, offset, m.∇lγω)
-    # gradient wrt lω
-    grad[end] = m.∇lω[1]
     obj
 end
 
 MathProgBase.eval_g(m::VarLmmModel, g, par) = fill!(g, 0)
-

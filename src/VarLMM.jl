@@ -1,14 +1,14 @@
 module VarLMM
 
-using DataFrames, Distributions, KNITRO, LinearAlgebra, MathProgBase, MixedModels
-using Reexport, Statistics, StatsModels, LsqFit
+using DataFrames, Distributions, LinearAlgebra, MixedModels, MathProgBase
+using Reexport, Statistics, StatsModels
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
 
 export VarLmmObs, VarLmmModel
-export DataFrame, fit!, mom_obj!, mgf_γω
+export DataFrame, fit!, mom_obj!, update_res!
 
 """
     VarLmmObs
@@ -26,8 +26,6 @@ struct VarLmmObs{T <: BlasReal}
     ∇β    ::Vector{T}     # gradient wrt β
     ∇τ    ::Vector{T}     # gradient wrt τ
     ∇Lγ   ::Matrix{T}     # gradient wrt L cholesky factor 
-    ∇lγω  ::Vector{T} 
-    ∇lω   ::Vector{T}  
     res   ::Vector{T}     # residual vector
     expwτ ::Vector{T}     # hold exp.(W * τ)
     R     ::Matrix{T}     # hold variance residuals
@@ -49,8 +47,6 @@ function VarLmmObs(
     ∇β          = Vector{T}(undef, p)
     ∇τ          = Vector{T}(undef, l)
     ∇Lγ         = Matrix{T}(undef, q, q)
-    ∇lγω        = Vector{T}(undef, q)
-    ∇lω         = Vector{T}(undef, 1)
     res         = Vector{T}(undef, n)
     expwτ       = Vector{T}(undef, n)
     R           = Matrix{T}(undef, n, n)
@@ -62,7 +58,7 @@ function VarLmmObs(
     # constructor
     VarLmmObs{T}(
         y, X, Z, W, 
-        ∇β, ∇τ, ∇Lγ, ∇lγω, ∇lω,
+        ∇β, ∇τ, ∇Lγ,
         res, expwτ, R,
         storage_nn, storage_nq, storage_qq,
         storage_n1, storage_q1)
@@ -106,14 +102,10 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     β   ::Vector{T}  # p-vector of mean regression coefficients
     τ   ::Vector{T}  # l-vector of WS variability regression coefficients
     Lγ  ::Matrix{T}  # q by q lower triangular cholesky factor of random effects  var-covar matrix pertaining to γ
-    lγω ::Vector{T}  # q by 1 cholesky factor of RE covar matrix for γ,ω
-    lω  ::Vector{T}  # 1 x 1 cholesky factor of RE variance for ω
     # working arrays
     ∇β  ::Vector{T}
     ∇τ  ::Vector{T}
     ∇Lγ ::Matrix{T}
-    ∇lγω::Vector{T} 
-    ∇lω ::Vector{T}
     storage_q :: Vector{T}
 end
 
@@ -121,97 +113,93 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
     # dimensions
     n, p = length(obsvec), size(obsvec[1].X, 2)
     q, l = size(obsvec[1].Z, 2), size(obsvec[1].W, 2)
-    npar = p + l + ((q + 1) * (q + 2)) >> 1
+    npar = p + l + (q * (q + 1)) >> 1
     # parameters
     β    = Vector{T}(undef, p)
     τ    = Vector{T}(undef, l)
     Lγ   = Matrix{T}(undef, q, q)
-    lγω  = Vector{T}(undef, q)
-    lω   = Vector{T}(undef, 1)
     # gradients
     ∇β   = Vector{T}(undef, p)
     ∇τ   = Vector{T}(undef, l)
     ∇Lγ  = Matrix{T}(undef, q, q)
-    ∇lγω = Vector{T}(undef, q)
-    ∇lω  = Vector{T}(undef, 1)
     storage_q = Vector{T}(undef, q)
     # constructor
     VarLmmModel{T}(
         obsvec, p, q, l, npar,
-         β,  τ,  Lγ,  lγω,  lω,
-        ∇β, ∇τ, ∇Lγ, ∇lγω, ∇lω,
+        β,  τ,  Lγ,
+        ∇β, ∇τ, ∇Lγ,
         storage_q)
 end
 
-function VarLmmModel(
-    f1::FormulaTerm, # formula for mean with random effects 
-    f2::FormulaTerm, # formula for WS variance
-    df, # dataframe containing all variables
-    idvar::Union{Symbol, String}) # contains ID var)
+# function VarLmmModel(
+#     f1::FormulaTerm, # formula for mean with random effects 
+#     f2::FormulaTerm, # formula for WS variance
+#     df, # dataframe containing all variables
+#     idvar::Union{Symbol, String}) # contains ID var)
 
-    # read in dataframe
-    # fit model
-    # create varLMMobs and model
-    # set parameters to the fit model
+#     # read in dataframe
+#     # fit model
+#     # create varLMMobs and model
+#     # set parameters to the fit model
 
-    lmm = LinearMixedModel(f1, df)
-    MixedModels.fit!(lmm, REML=true)
-    Z = copy(transpose(first(lmm.reterms).z))
+#     lmm = LinearMixedModel(f1, df)
+#     MixedModels.fit!(lmm, REML=true)
+#     Z = copy(transpose(first(lmm.reterms).z))
 
-    if typeof(idvar) <: String
-        idvar = Symbol(idvar)
-    end
+#     if typeof(idvar) <: String
+#         idvar = Symbol(idvar)
+#     end
 
-    ids = unique(df[!, idvar])
-    npeople = length(ids)
-    ntotal = size(Z, 1)
-    obsvec = Vector{VarLmmObs{Float64}}(undef, npeople)
-    W = modelmatrix(f2, df) 
-    for i in eachindex(ids)
-        pinds = findall(df[!, idvar] .== ids[i])
-        obs = VarLmmObs(lmm.y[pinds], 
-        lmm.X[pinds, :], 
-        Z[pinds, :], 
-        W[pinds, :])
-        obsvec[i] = obs
-    end
-    model = VarLmmModel(obsvec)
+#     ids = unique(df[!, idvar])
+#     npeople = length(ids)
+#     ntotal = size(Z, 1)
+#     obsvec = Vector{VarLmmObs{Float64}}(undef, npeople)
+#     W = modelmatrix(f2, df) 
+#     for i in eachindex(ids)
+#         pinds = findall(df[!, idvar] .== ids[i])
+#         obs = VarLmmObs(lmm.y[pinds], 
+#         lmm.X[pinds, :], 
+#         Z[pinds, :], 
+#         W[pinds, :])
+#         obsvec[i] = obs
+#     end
+#     model = VarLmmModel(obsvec)
 
-    #update model params with LMM-fitted params
-    model.β .= lmm.beta 
-    update_res!(model)
-    @inbounds for j in 1:model.q, i in j:model.q
-        model.Lγ[i, j] = first(lmm.lambda)[i, j] * lmm.sigma
-    end
-    model.lγω .= zeros(Float64, model.q)
+#     #update model params with LMM-fitted params
+#     model.β .= lmm.beta 
+#     update_res!(model)
+#     @inbounds for j in 1:model.q, i in j:model.q
+#         model.Lγ[i, j] = first(lmm.lambda)[i, j] * lmm.sigma
+#     end
+#     model.lγω .= zeros(Float64, model.q)
 
 
-    ## set τ[1] to 2log(lmm.sigma), rest 0
-    model.τ .= zeros(Float64, model.l)
-    model.τ[1] = 2log(lmm.sigma)
+#     ## set τ[1] to 2log(lmm.sigma), rest 0
+#     model.τ .= zeros(Float64, model.l)
+#     model.τ[1] = 2log(lmm.sigma)
     
-    ## use NLS on d_is 
+#     ## use NLS on d_is 
     
-    Σ = model.Lγ * transpose(model.Lγ)
-    d = Vector{Float64}(undef, ntotal)
-    start = 1
-    for i in 1:length(model.data)
-        ni = length(model.data[i].y)
-        stop = start + ni - 1
-        d[start:stop] = model.data[i].res.^2 - 
-           diag(model.data[i].Z * Σ * 
-           transpose(model.data[i].Z))
-        start = stop + 1
-    end
-    multimodel(W, τmod) = exp.(W * τmod)
-    nls = curve_fit(multimodel, W, d, model.τ)
-    copy!(model.τ, nls.param)
+#     Σ = model.Lγ * transpose(model.Lγ)
+#     d = Vector{Float64}(undef, ntotal)
+#     start = 1
+#     for i in 1:length(model.data)
+#         ni = length(model.data[i].y)
+#         stop = start + ni - 1
+#         d[start:stop] = model.data[i].res.^2 - 
+#            diag(model.data[i].Z * Σ * 
+#            transpose(model.data[i].Z))
+#         start = stop + 1
+#     end
+#     multimodel(W, τmod) = exp.(W * τmod)
+#     nls = curve_fit(multimodel, W, d, model.τ)
+#     copy!(model.τ, nls.param)
     
-    #set lω to 0.0
-    model.lω[1] = 0.0
+#     #set lω to 0.0
+#     model.lω[1] = 0.0
 
-    return model
-end
+#     return model
+# end
 
 
 include("mom.jl")

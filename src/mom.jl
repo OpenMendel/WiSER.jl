@@ -7,14 +7,11 @@ parameter estimates and also the gradient. eV can be precalculated to reduce
 computation time in fitting. 
 """
 function mom_obj!(
-    obs     ::VarLmmObs{T},
-    β       ::Vector{T},
-    τ       ::Vector{T},
-    Lγ      ::Matrix{T}, # must be lower triangular
-    lγω     ::Vector{T},
-    lω      ::Vector{T},
-    mgfγω   ::T,
-    needgrad::Bool = true
+    obs      ::VarLmmObs{T},
+    β        ::Vector{T},
+    τ        ::Vector{T},
+    Lγ       ::Matrix{T}, # must be lower triangular
+    needgrad ::Bool = true
     ) where T <: BlasReal        
     n, p = size(obs.X)
     q, l = size(obs.Z, 2), size(obs.W, 2)
@@ -22,8 +19,6 @@ function mom_obj!(
         fill!(obs.∇β, 0)
         fill!(obs.∇τ, 0)
         fill!(obs.∇Lγ, 0)
-        fill!(obs.∇lγω, 0)
-        fill!(obs.∇lω, 0)
     end
     # update residuals ri=yi-Xi*β and the variance residual matrix
     update_res!(obs, β)
@@ -42,56 +37,33 @@ function mom_obj!(
     mul!(obs.expwτ, obs.W, τ)
     @inbounds for i in 1:n
         obs.expwτ[i] = exp(obs.expwτ[i])
-        obs.R[i, i] -= mgfγω * obs.expwτ[i]
+        obs.R[i, i] -= obs.expwτ[i]
     end
-    obj = (1//2) * sum(abs2, obs.R)
+    obj = (1//2) * abs2(norm(obs.R))
     
     # gradient
     if needgrad
         # wrt β
-        # BLAS.symv!('U', T(1), obs.R, obs.res, T(0), obs.storage_n1)
+        # BLAS.symv!('U', T(-2), obs.R, obs.res, T(0), obs.storage_n1)
         # this line is faster than BLAS symv!
         mul!(obs.storage_n1, obs.R, obs.res)
-        mul!(obs.∇β, transpose(obs.X), obs.storage_n1)
-        obs.∇β .*= -2
+        BLAS.gemv!('T', T(-2), obs.X, obs.storage_n1, T(0), obs.∇β)
         
         # wrt τ
         @inbounds for i in 1:n
             obs.storage_n1[i] = obs.R[i, i] * obs.expwτ[i]
         end
-        mul!(obs.∇τ, transpose(obs.W), obs.storage_n1)
-        obs.∇τ .*= -mgfγω
+        BLAS.gemv!('T', T(-1), obs.W, obs.storage_n1, T(0), obs.∇τ)
         
         # wrt Lγ
-        mgfγωsumriw = - mgfγω * sum(obs.storage_n1)
-        # ∇Lγ = Z' * R * Z * Lγ (for now)
+        # ∇Lγ = Z' * R * Z * Lγ
         # mul!(obs.storage_nq, obs.R, obs.Z)
         BLAS.symm!('L', 'U', T(1), obs.R, obs.Z, T(0), obs.storage_nq)
         mul!(obs.storage_qq, transpose(obs.Z), obs.storage_nq)
         # mul!(obs.∇Lγ, obs.storage_qq, Lγ)
         # BLAS utilizing triangular property may be slower for small q
         copy!(obs.∇Lγ, obs.storage_qq)
-        BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.∇Lγ)
-        
-        # ∇Lγ = ∂f / ∂Lγ
-        # storage_q1 = (I + Lγ') * lγω
-        copy!(obs.storage_q1, lγω)
-        mul!(obs.storage_q1, transpose(Lγ), lγω, T(1), T(1))        
-        # mul!(obs.∇Lγ, lγω, transpose(obs.storage_q1), mgfγωsumriw, T(1))
-        # above line incurs 3 memory allocations. don't know why.
-        # resort to BLAS.ger here
-        @inbounds for j in eachindex(obs.∇Lγ)
-            obs.∇Lγ[j] *= -2
-        end
-        BLAS.ger!(mgfγωsumriw, lγω, obs.storage_q1, obs.∇Lγ)
-        
-        # wrt lγω
-        copy!(obs.∇lγω, obs.storage_q1)
-        mul!(obs.∇lγω, Lγ, obs.storage_q1, T(1), T(1))
-        obs.∇lγω .*= mgfγωsumriw
-        
-        # wrt lω
-        obs.∇lω[1] = mgfγωsumriw * lω[1]
+        BLAS.trmm!('R', 'L', 'N', 'N', T(-2), Lγ, obs.∇Lγ)
     end
     obj
 end
@@ -107,25 +79,18 @@ function mom_obj!(
         fill!(  m.∇β, 0)
         fill!(  m.∇τ, 0)
         fill!( m.∇Lγ, 0)
-        fill!(m.∇lγω, 0)
-        fill!( m.∇lω, 0)
     end
-    # pre-calculate mgfγω
-    mgfγω = mgf_γω(m)
     # accumulate obj and gradient
     obj = zero(T)
     for i in eachindex(m.data)
-        obji = mom_obj!(m.data[i], m.β, m.τ, m.Lγ, m.lγω, m.lω, mgfγω, needgrad)
+        obji = mom_obj!(m.data[i], m.β, m.τ, m.Lγ, needgrad)
         obj += obji
         if needgrad
-            m.∇β   .+= m.data[i].∇β
-            m.∇τ   .+= m.data[i].∇τ
-            # m.∇Lγ  .+= m.data[i].∇Lγ # There's allocation here. Why?
+            m.∇β .+= m.data[i].∇β
+            m.∇τ .+= m.data[i].∇τ
             @inbounds for j in eachindex(m.∇Lγ)
                 m.∇Lγ[j] += m.data[i].∇Lγ[j]
             end
-            m.∇lγω .+= m.data[i].∇lγω
-            m.∇lω  .+= m.data[i].∇lω
         end
     end
     obj
@@ -141,7 +106,7 @@ function update_res!(
     β::Vector{T}
     ) where T <: BlasReal    
     copyto!(obs.res, obs.y)
-    mul!(obs.res, obs.X, β, -one(T), one(T))
+    mul!(obs.res, obs.X, β, T(-1), T(1))
 end
 
 """
@@ -154,19 +119,4 @@ function update_res!(m::VarLmmModel{T}) where T <: BlasReal
         update_res!(m.data[i], m.β)
     end
     nothing
-end
-
-"""
-    mgf_γω(m::VarLmmModel)
-
-Moment generating function of random effects `[γ; ω]` evaluated at point
-`[ℓγω; 1]`. For now, we assume `[γ; ω]` are jointly normal with mean 0 and 
-covariance `Σγω`. Later we will allow user flexibility to specify this mgf 
-to relax the normality assumption on random effects.
-"""
-function mgf_γω(m::VarLmmModel{T}) where T <: BlasReal
-    # m.storage_q = (I + Lγ') * lγω
-    copy!(m.storage_q, m.lγω)
-    mul!(m.storage_q, transpose(m.Lγ), m.lγω, one(T), one(T))
-    exp((1//2) * (abs2(m.lω[1]) + sum(abs2, m.storage_q)))
 end

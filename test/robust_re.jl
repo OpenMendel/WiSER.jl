@@ -143,8 +143,8 @@ MixedModels.fit!(lmm)
     Diagonal(collect(values(lmm.σρs.id.σ)))
 @show σ0_by_lmm = lmm.σ
 for solver in [
-    KNITRO.KnitroSolver(outlev=3) # outlev 0-6
-    # Ipopt.IpoptSolver(print_level=3)
+    # KNITRO.KnitroSolver(outlev=3) # outlev 0-6
+    Ipopt.IpoptSolver(print_level=3)
     # NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=4000)
     # NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000)
     # NLopt.NLoptSolver(algorithm=:LD_LBFGS, maxeval=4000)
