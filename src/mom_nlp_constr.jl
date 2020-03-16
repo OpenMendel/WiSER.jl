@@ -7,18 +7,17 @@ function fit!(
     #solver=NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=10000)
     #solver=NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
     )
-    p, q, l, npar = m.p, m.q, m.l, m.npar
+    q, l = m.q, m.l
+    npar = l + (q * (q + 1)) >> 1
     optm = MathProgBase.NonlinearModel(solver)
     # diagonal entries of Cholesky factor is lower bounded by  0
     lb = fill(-Inf, npar)
     ub = fill( Inf, npar)
-    offset = p + l + 1
-    for j in 1:q, i in j:q
-        (i == j) && (lb[offset] = 0)
-        offset += 1
-    end
-    # lb[1:p] .= m.β
-    # ub[1:p] .= m.β
+    # offset = l + 1
+    # @inbounds for j in 1:q, i in j:q
+    #     (i == j) && (lb[offset] = 0)
+    #     offset += 1
+    # end
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
@@ -30,7 +29,7 @@ function fit!(
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     # update parameters and refresh gradient
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
-    mom_obj!(m, true)
+    mom_obj!(m, true, true)
     m
 end
 
@@ -43,12 +42,11 @@ function modelpar_to_optimpar!(
     par::Vector,
     m::VarLmmModel{T}
     ) where T <: BlasReal
-    p, q, l = m.p, m.q, m.l
-    # β, τ
-    copyto!(par, m.β)
-    copyto!(par, p + 1, m.τ) 
+    q, l = m.q, m.l
+    # τ
+    copyto!(par, 1, m.τ, 1, l)
     # Lγ
-    offset = p + l + 1
+    offset = l + 1
     @inbounds for j in 1:q, i in j:q
         par[offset] = m.Lγ[i, j]
         offset += 1
@@ -65,13 +63,12 @@ function optimpar_to_modelpar!(
     m::VarLmmModel, 
     par::Vector
     )
-    p, q, l = m.p, m.q, m.l
-    # β, τ
-    copyto!(m.β, 1, par,     1, p)
-    copyto!(m.τ, 1, par, p + 1, l)
+    q, l = m.q, m.l
+    # τ
+    copyto!(m.τ, 1, par, 1, l)
     # Lγ
     fill!(m.Lγ, 0)
-    offset = p + l + 1
+    offset = l + 1
     @inbounds for j in 1:q, i in j:q
         m.Lγ[i, j] = par[offset]
         offset += 1
@@ -97,7 +94,7 @@ function MathProgBase.eval_f(
     par::Vector
     )
     optimpar_to_modelpar!(m, par)
-    mom_obj!(m, false)
+    mom_obj!(m, false, false)
 end
 
 function MathProgBase.eval_grad_f(
@@ -105,15 +102,13 @@ function MathProgBase.eval_grad_f(
     grad::Vector, 
     par::Vector
     )
-    p, q, l = m.p, m.q, m.l
+    q, l = m.q, m.l
     optimpar_to_modelpar!(m, par) 
-    obj = mom_obj!(m, true)
-    # gradient wrt β
-    copyto!(grad, m.∇β)
+    obj = mom_obj!(m, true, false)
     # gradient wrt τ
-    copyto!(grad, p + 1, m.∇τ)
+    copyto!(grad, 1, m.∇τ, 1, l)
     # gradient wrt Lγ
-    offset = p + l + 1
+    offset = l + 1
     @inbounds for j in 1:q, i in j:q
         grad[offset] = m.∇Lγ[i, j]
         offset += 1
@@ -122,3 +117,45 @@ function MathProgBase.eval_grad_f(
 end
 
 MathProgBase.eval_g(m::VarLmmModel, g, par) = fill!(g, 0)
+
+"""
+    init_ls!(m::VarLMM)
+
+Initialize parameter from least squares estimate.
+TODO: need to optimize the code
+"""
+function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
+    p, q, l = m.p, m.q, m.l
+    # LS estimate for β
+    xtx = zeros(T, p, p)
+    xty = zeros(T, p)
+    for i in eachindex(m.data)
+        xtx .+= m.data[i].X'm.data[i].X
+        xty .+= m.data[i].X'm.data[i].y
+    end
+    copy!(m.β, cholesky(Symmetric(xtx)) \ xty)
+    update_res!(m)
+    # LS etimate for σ2ω
+    σ2ω = T(0)
+    n = 0
+    for i in eachindex(m.data)
+        σ2ω += abs2(norm(m.data[i].res))
+        n   += length(m.data[i].y)
+    end
+    σ2ω /= n
+    # WS intercept only model
+    fill!(m.τ, 0)
+    m.τ[1] = log(σ2ω)
+    # LS estimate for Σγ
+    ztz2 = zeros(T, q * q, q * q)
+    ztr2 = zeros(T, q * q)
+    for i in eachindex(m.data)
+        ztz    = m.data[i].Z'm.data[i].Z 
+        ztz2 .+= kron(ztz, ztz)
+        ztr    = m.data[i].Z'm.data[i].res
+        ztr2 .+= kron(ztr, ztr)
+    end
+    Σγ = reshape(cholesky(Symmetric(ztz2)) \ ztr2, (q, q))
+    copy!(m.Lγ, cholesky(Symmetric(Σγ), check = false).L)
+    m
+end

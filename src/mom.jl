@@ -3,25 +3,25 @@
     mom_obj!(m; needgrad::Bool)
 
 Evaluate the method of moments objective function for the given data and 
-parameter estimates and also the gradient. eV can be precalculated to reduce 
-computation time in fitting. 
+parameter values. Gradient is also calculated if `needgrad=true`.
 """
 function mom_obj!(
-    obs      ::VarLmmObs{T},
-    β        ::Vector{T},
-    τ        ::Vector{T},
-    Lγ       ::Matrix{T}, # must be lower triangular
-    needgrad ::Bool = true
-    ) where T <: BlasReal        
-    n, p = size(obs.X)
-    q, l = size(obs.Z, 2), size(obs.W, 2)
+    obs       :: VarLmmObs{T},
+    β         :: Vector{T},
+    τ         :: Vector{T},
+    Lγ        :: Matrix{T}, # must be lower triangular
+    needgrad  :: Bool = true,
+    updateres :: Bool = true
+    ) where T <: BlasReal
+    n = length(obs.y)
     if needgrad
         fill!(obs.∇β, 0)
         fill!(obs.∇τ, 0)
         fill!(obs.∇Lγ, 0)
     end
-    # update residuals ri=yi-Xi*β and the variance residual matrix
-    update_res!(obs, β)
+    # update the residual vector ri = y_i - Xi β
+    updateres && update_res!(obs, β)
+    # update the variance residual matrix Ri
     # mul!(obs.R, obs.res, transpose(obs.res))
     # comparing to above line, BLAS utilizes symmetry.
     BLAS.syrk!('U', 'N', T(1), obs.res, T(0), obs.R)
@@ -43,18 +43,11 @@ function mom_obj!(
     
     # gradient
     if needgrad
-        # wrt β
-        # BLAS.symv!('U', T(-2), obs.R, obs.res, T(0), obs.storage_n1)
-        # this line is faster than BLAS symv!
-        mul!(obs.storage_n1, obs.R, obs.res)
-        BLAS.gemv!('T', T(-2), obs.X, obs.storage_n1, T(0), obs.∇β)
-        
         # wrt τ
         @inbounds for i in 1:n
             obs.storage_n1[i] = obs.R[i, i] * obs.expwτ[i]
         end
-        BLAS.gemv!('T', T(-1), obs.W, obs.storage_n1, T(0), obs.∇τ)
-        
+        BLAS.gemv!('T', T(-1), obs.W, obs.storage_n1, T(0), obs.∇τ)        
         # wrt Lγ
         # ∇Lγ = Z' * R * Z * Lγ
         # mul!(obs.storage_nq, obs.R, obs.Z)
@@ -72,8 +65,9 @@ end
 TODO
 """
 function mom_obj!(
-    m::VarLmmModel{T},
-    needgrad::Bool = true
+    m         :: VarLmmModel{T},
+    needgrad  :: Bool = true,
+    updateres :: Bool = true
     ) where T <: BlasReal
     if needgrad
         fill!(  m.∇β, 0)
@@ -83,7 +77,7 @@ function mom_obj!(
     # accumulate obj and gradient
     obj = zero(T)
     for i in eachindex(m.data)
-        obji = mom_obj!(m.data[i], m.β, m.τ, m.Lγ, needgrad)
+        obji = mom_obj!(m.data[i], m.β, m.τ, m.Lγ, needgrad, updateres)
         obj += obji
         if needgrad
             m.∇β .+= m.data[i].∇β
