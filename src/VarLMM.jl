@@ -27,11 +27,16 @@ struct VarLmmObs{T <: BlasReal}
     ∇τ         :: Vector{T} # gradient wrt τ
     ∇Lγ        :: Matrix{T} # gradient wrt L cholesky factor 
     res        :: Vector{T} # residual vector
+    res2       :: Vector{T} # residual vector.^2
+    resnrm2    :: Vector{T} # sum of residual squares
     expwτ      :: Vector{T} # hold exp.(W * τ)
-    R          :: Matrix{T} # hold variance residuals
-    storage_nq :: Matrix{T}
+    ztz        :: Matrix{T} # Z'Z
+    ztres      :: Vector{T} # Z'res
+    zlltzt_dg  :: Vector{T}
+    storage_qn :: Matrix{T}
     storage_qq :: Matrix{T}
     storage_n1 :: Vector{T}
+    storage_q1 :: Vector{T}
 end
 
 function VarLmmObs(
@@ -46,17 +51,22 @@ function VarLmmObs(
     ∇τ          = Vector{T}(undef, l)
     ∇Lγ         = Matrix{T}(undef, q, q)
     res         = Vector{T}(undef, n)
+    res2        = Vector{T}(undef, n)
+    resnrm2     = Vector{T}(undef, n)
     expwτ       = Vector{T}(undef, n)
-    R           = Matrix{T}(undef, n, n)
-    storage_nq  = Matrix{T}(undef, n, q)
+    ztz         = Z'Z
+    ztres       = Vector{T}(undef, q)
+    zlltzt_dg   = Vector{T}(undef, n)
+    storage_qn  = Matrix{T}(undef, q, n)
     storage_qq  = Matrix{T}(undef, q, q)
     storage_n1  = Vector{T}(undef, n)
+    storage_q1  = Vector{T}(undef, q)
     # constructor
     VarLmmObs{T}(
         y, X, Z, W, 
         ∇β, ∇τ, ∇Lγ,
-        res, expwτ, R,
-        storage_nq, storage_qq, storage_n1)
+        res, res2, resnrm2, expwτ, ztz, ztres, zlltzt_dg,
+        storage_qn, storage_qq, storage_n1, storage_q1)
 end
 
 """
@@ -84,7 +94,7 @@ end
 
 function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
     # dimensions
-    n, p = length(obsvec), size(obsvec[1].X, 2)
+    p    = size(obsvec[1].X, 2)
     q, l = size(obsvec[1].Z, 2), size(obsvec[1].W, 2)
     # parameters
     β    = Vector{T}(undef, p)

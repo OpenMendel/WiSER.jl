@@ -10,14 +10,8 @@ function fit!(
     q, l = m.q, m.l
     npar = l + (q * (q + 1)) >> 1
     optm = MathProgBase.NonlinearModel(solver)
-    # diagonal entries of Cholesky factor is lower bounded by  0
     lb = fill(-Inf, npar)
     ub = fill( Inf, npar)
-    # offset = l + 1
-    # @inbounds for j in 1:q, i in j:q
-    #     (i == j) && (lb[offset] = 0)
-    #     offset += 1
-    # end
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
@@ -29,6 +23,10 @@ function fit!(
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     # update parameters and refresh gradient
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
+    # diagonal entries of cholesky factor should be >= 0
+    if m.Lγ[1, 1] < 0
+        m.Lγ .*= -1
+    end
     mom_obj!(m, true, true)
     m
 end
@@ -44,7 +42,7 @@ function modelpar_to_optimpar!(
     ) where T <: BlasReal
     q, l = m.q, m.l
     # τ
-    copyto!(par, 1, m.τ, 1, l)
+    copyto!(par, m.τ)
     # Lγ
     offset = l + 1
     @inbounds for j in 1:q, i in j:q
@@ -106,7 +104,7 @@ function MathProgBase.eval_grad_f(
     optimpar_to_modelpar!(m, par) 
     obj = mom_obj!(m, true, false)
     # gradient wrt τ
-    copyto!(grad, 1, m.∇τ, 1, l)
+    copyto!(grad, m.∇τ)
     # gradient wrt Lγ
     offset = l + 1
     @inbounds for j in 1:q, i in j:q

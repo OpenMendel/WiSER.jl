@@ -1,20 +1,20 @@
 using BenchmarkTools, Distributions, InteractiveUtils
-using LinearAlgebra, Random, Test, VarLMM
+using LinearAlgebra, Profile, Random, Test, VarLMM
 
 @info "generate data"
 Random.seed!(123)
 # dimensions
 m  = 6000 # number of individuals
-ns = rand(5:11, m) # numbers of observations per individual
+ns = rand(8:8, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
 q  = 2    # number of random effects, including intercept
-l  = 5    # number of WS variance covariates, including intercept
+l  = 3    # number of WS variance covariates, including intercept
 obsvec = Vector{VarLmmObs{Float64}}(undef, m)
 # true parameter values
 βtrue = [0.1; 6.5; -3.5; 1.0; 5]
-τtrue = [-1.5; 1.0; 0.5; zeros(l - 3)]
+τtrue = [-1.5; 1.5; -0.5; zeros(l - 3)]
 Σγ    = [2.0 0.0; 0.0 1.2]
-δγω   = [0.1; 0.2]
+δγω   = [0.2; 0.1]
 σω    = [1.0]
 Σγω   = [Σγ δγω; δγω' σω]
 Lγω   = cholesky(Symmetric(Σγω), check = false).L
@@ -42,7 +42,7 @@ for i in 1:m
     # @test γω[end] == 0
     # generate y
     μy = X * βtrue + Z * γω[1:q]
-    @views vy = exp.(W * τtrue .+ dot(γω[1:q], Lγω[end, 1:q]) .+ γω[end])
+    @views vy = exp.(W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end])
     y = rand(MvNormal(μy, Diagonal(vy)))
     # form a VarLmmObs instance
     obsvec[i] = VarLmmObs(y, X, Z, W)
@@ -75,6 +75,10 @@ vlmm.Lγ  .= Lγ
 bm = @benchmark mom_obj!($vlmm, true, true)
 display(bm); println()
 @test allocs(bm) == 0
+# @info "profile"
+# Profile.clear()
+# @profile @btime mom_obj!($vlmm, true, true)
+# Profile.print(format=:flat)
 end
 
 # @testset "fit! (start from truth)" begin
