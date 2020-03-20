@@ -4,6 +4,11 @@ export ◺, commutation, CopyMatrix, kron_axpy!, kr_axpy!, kr, mul!, vech,
     Ct_A_kr_B, Ct_A_kr_B!
 import LinearAlgebra: mul!
 
+"""
+    ◺(n::Integer)
+
+Triangular number `n * (n + 1) / 2`.
+"""
 @inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
 """

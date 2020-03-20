@@ -2,19 +2,19 @@ using BenchmarkTools, Distributions, InteractiveUtils
 using LinearAlgebra, Profile, Random, Test, VarLMM
 
 @info "generate data"
-Random.seed!(123)
+Random.seed!(12)
 # dimensions
 m  = 6000 # number of individuals
-ns = rand(8:8, m) # numbers of observations per individual
+ns = rand(5:11, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
-q  = 2    # number of random effects, including intercept
-l  = 3    # number of WS variance covariates, including intercept
+q  = 5    # number of random effects, including intercept
+l  = 5    # number of WS variance covariates, including intercept
 obsvec = Vector{VarLmmObs{Float64}}(undef, m)
 # true parameter values
 βtrue = [0.1; 6.5; -3.5; 1.0; 5]
 τtrue = [-1.5; 1.5; -0.5; zeros(l - 3)]
-Σγ    = [2.0 0.0; 0.0 1.2]
-δγω   = [0.2; 0.1]
+Σγ    = Matrix(Diagonal([2.0; 1.2; rand(q - 2)]))
+δγω   = [0.2; 0.1; rand(q - 2) ./ 10]
 σω    = [1.0]
 Σγω   = [Σγ δγω; δγω' σω]
 Lγω   = cholesky(Symmetric(Σγω), check = false).L
@@ -39,7 +39,6 @@ for i in 1:m
     @views Distributions.rand!(Normal(), W[:, 2:l])
     # generate random effects: γω = Lγω * z
     mul!(γω, Lγω, Distributions.rand!(Normal(), z))
-    # @test γω[end] == 0
     # generate y
     μy = X * βtrue + Z * γω[1:q]
     @views vy = exp.(W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end])
@@ -67,7 +66,7 @@ vlmm.Lγ  .= Lγ
 @show vlmm.∇Lγ
 H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
 # display(H); println()
-@test norm(H - transpose(H)) < 1e-8
+@test norm(H - transpose(H)) / norm(H) < 1e-8
 @test all(eigvals(Symmetric(H)) .≥ 0)
 @info "type stability"
 #@code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
@@ -146,11 +145,14 @@ for solver in [
     @show solver
     println("----------")
     # re-set starting point to LS fit
-    init_ls!(vlmm)
+    @info "initilize from LS estimate"
+    init_ls!(vlmm) # warm up
+    @time init_ls!(vlmm)
     @show vlmm.β
     @show vlmm.τ
     @show vlmm.Lγ
     # fit
+    @info "fittng ..."
     @info "obj at starting point"
     @show mom_obj!(vlmm)
     @time VarLMM.fit!(vlmm, solver)

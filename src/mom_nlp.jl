@@ -1,5 +1,8 @@
 """
-TODO
+    fit!(m::VarLmmModel, solver=Ipopt.IpoptSolver(print_level=5))
+
+Fit a `VarLMMModel` object by method of moment using nonlinear programming 
+solver.
 """
 function fit!(
     m::VarLmmModel,
@@ -158,10 +161,9 @@ function MathProgBase.eval_hesslag(m::VarLmmModel, H::Vector{T},
 end
 
 """
-    init_ls!(m::VarLMM)
+    init_ls!(m::VarLMMModel)
 
-Initialize parameter from least squares estimate.
-TODO: need to optimize the code
+Initialize parameters of a `VarLMMModel` object from least squares estimate.
 """
 function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     p, q, l = m.p, m.q, m.l
@@ -169,16 +171,15 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     xtx = zeros(T, p, p)
     xty = zeros(T, p)
     for i in eachindex(m.data)
-        xtx .+= m.data[i].Xt * transpose(m.data[i].Xt)
-        xty .+= m.data[i].Xt * m.data[i].y
+        BLAS.syrk!('U', 'N', T(1), m.data[i].Xt, T(1), xtx)
+        BLAS.gemv!('N', T(1), m.data[i].Xt, m.data[i].y, T(1), xty)
     end
-    copy!(m.β, cholesky(Symmetric(xtx)) \ xty)
+    ldiv!(m.β, cholesky!(Symmetric(xtx)), xty)
     update_res!(m)
     # LS etimate for σ2ω
-    σ2ω = T(0)
-    n = 0
-    for i in eachindex(m.data)
-        σ2ω += abs2(norm(m.data[i].res))
+    n, σ2ω = 0, T(0)
+    @inbounds for i in eachindex(m.data)
+        σ2ω += m.data[i].resnrm2[1]
         n   += length(m.data[i].y)
     end
     σ2ω /= n
@@ -188,13 +189,13 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     # LS estimate for Σγ
     ztz2 = zeros(T, q * q, q * q)
     ztr2 = zeros(T, q * q)
-    for i in eachindex(m.data)
+    @inbounds for i in eachindex(m.data)
         ztz    = m.data[i].ztz 
-        ztz2 .+= kron(ztz, ztz)
-        ztr    = m.data[i].Zt * m.data[i].res
-        ztr2 .+= kron(ztr, ztr)
+        kron_axpy!(ztz, ztz, ztz2)
+        ztres  = m.data[i].ztres
+        kron_axpy!(ztres, ztres, ztr2)
     end
-    Σγ = reshape(cholesky(Symmetric(ztz2)) \ ztr2, (q, q))
-    copy!(m.Lγ, cholesky(Symmetric(Σγ), check = false).L)
+    Σγ = reshape(cholesky!(Symmetric(ztz2)) \ ztr2, (q, q))
+    copy!(m.Lγ, cholesky!(Symmetric(Σγ), check = false).L)
     m
 end

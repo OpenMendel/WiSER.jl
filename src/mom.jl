@@ -15,6 +15,10 @@ function mom_obj!(
     updateres :: Bool = true
     ) where T <: BlasReal
     (q, n) = size(obs.Zt)
+    l = size(obs.Wt, 1)
+    ###########
+    # objective
+    ###########
     # update the residual vector ri = y_i - Xi β
     updateres && update_res!(obs, β)
     # obs.storage_qq = (Z' * Z) * L
@@ -47,12 +51,14 @@ function mom_obj!(
         end
         obj += obs.expwτ[j] * (obs.zlltzt_dg[j] - obs.res2[j])
     end
-    
+    ###########
     # gradient
+    ###########
     if needgrad
         # wrt τ
         @inbounds for j in 1:n
-            obs.storage_n1[j] = (obs.res2[j] - obs.expwτ[j] - obs.zlltzt_dg[j]) * obs.expwτ[j]
+            Rjj = obs.res2[j] - obs.expwτ[j] - obs.zlltzt_dg[j]
+            obs.storage_n1[j] = Rjj * obs.expwτ[j]
         end
         BLAS.gemv!('N', T(-1), obs.Wt, obs.storage_n1, T(0), obs.∇τ)
         # wrt Lγ
@@ -64,22 +70,23 @@ function mom_obj!(
                 obs.storage_qn[i, j] = sqrtej * obs.Zt[i, j]
             end
         end
+        # ∇Lγ = (Z' * Z) * L * L' * (Z' * Z) was computed earlier        
         # ∇Lγ += storage_qn * storage_qn' - ztres * ztres'
-        # ∇Lγ = (Z' * Z) * L * L' * (Z' * Z) was computed earlier
         BLAS.syrk!('U', 'N',  T(1), obs.storage_qn, T(1), obs.∇Lγ)
         BLAS.syrk!('U', 'N', T(-1),      obs.ztres, T(1), obs.∇Lγ)
         copytri!(obs.∇Lγ, 'U')
-        # BLAS utilizing triangular property may be slower for small q
+        # so far ∇Lγ holds ∇Σγ, now ∇Lγ = ∇Σγ * Lγ
         BLAS.trmm!('R', 'L', 'N', 'N', T(2), Lγ, obs.∇Lγ)
     end
-
+    ###########
     # hessian
+    ###########
     if needhess
         # Hττ = W' * Diagonal(expwτ.^2) * W
         # storage_ln = W' * Diagonal(expwτ)
         @inbounds for j in 1:n
             ej = obs.expwτ[j]
-            for i in 1:size(obs.Wt, 1)
+            for i in 1:l
                 obs.storage_ln[i, j] = ej * obs.Wt[i, j]
             end
         end
@@ -98,7 +105,10 @@ function mom_obj!(
 end
 
 """
-TODO
+    mom_obj!(m::VarLMM, needgrad::Bool, needhess:Bool, updateres::Bool)
+
+Calculate the objective function of a `VarLMM` object and optionally the 
+graudient and hessian.
 """
 function mom_obj!(
     m         :: VarLmmModel{T},
@@ -121,9 +131,9 @@ function mom_obj!(
     for i in eachindex(m.data)
         obj += mom_obj!(m.data[i], m.β, m.τ, m.Lγ, needgrad, needhess, updateres)
         if needgrad
-            BLAS.axpy!(T(1), m.data[i].∇β , m.∇β )
-            BLAS.axpy!(T(1), m.data[i].∇τ , m.∇τ )
-            BLAS.axpy!(T(1), m.data[i].∇Lγ, m.∇Lγ)
+            # BLAS.axpy!(T(1), m.data[i].∇β   , m.∇β )
+            BLAS.axpy!(T(1), m.data[i].∇τ   , m.∇τ )
+            BLAS.axpy!(T(1), m.data[i].∇Lγ  , m.∇Lγ)
         end
         if needhess
             BLAS.axpy!(T(1), m.data[i].Hττ  , m.Hττ  )
