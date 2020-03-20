@@ -17,6 +17,7 @@ display(bm); println()
 Y2 = zeros(n * p, m * q)
 kron_axpy!(transpose(A), X, Y2)
 @test Y2 == kron(transpose(A), X)
+# bm = @benchmark kron_axpy!($(transpose(A)), $X, $Y2) setup=(fill!($Y2, 0))
 bm = @benchmark kron_axpy!($(transpose(A)), $X, $Y2) setup=(fill!($Y2, 0))
 display(bm); println()
 @test allocs(bm) == 0
@@ -72,4 +73,52 @@ result2 = similar(C' * vec(M))
 bm = @benchmark mul!($result2, $(transpose(C)), $(vec(M)))
 display(bm); println()
 @test_skip allocs(bm) == 0
+end
+
+@testset "Ct_At_kron_A_KC" begin
+Random.seed!(123)
+q = 5
+q◺ = VarLMM.◺(q)
+A = randn(q, q); A = A'A * LowerTriangular(randn(q, q))
+H = Ct_At_kron_A_KC(A)
+Cq  = CopyMatrix(q)
+Kqq = commutation(q, q)
+@test size(H) == (q◺, q◺)
+@test issymmetric(H)
+@test H == Cq' * kron(A', A) * Kqq * Cq
+bm = @benchmark Ct_At_kron_A_KC!($H, $A) setup=(fill!($H, 0))
+display(bm); println()
+@test allocs(bm) == 0
+end
+
+@testset "Ct_A_kron_B_C" begin
+Random.seed!(123)
+q = 5
+q◺ = VarLMM.◺(q)
+A = randn(q, q); A = A'A
+B = randn(q, q); B = B'B
+H = Ct_A_kron_B_C(A, B)
+Cq  = CopyMatrix(q)
+@test size(H) == (q◺, q◺)
+@test issymmetric(H)
+@test all(eigvals(Symmetric(H)) .≥ 0)
+@test H == Cq' * kron(A, B) * Cq
+bm = @benchmark Ct_A_kron_B_C!($H, $A, $B) setup=(fill!($H, 0))
+display(bm); println()
+@test allocs(bm) == 0
+end
+
+@testset "Ct_A_kr_B" begin
+Random.seed!(123)
+q, n = 5, 10
+q◺ = ◺(q)
+A = randn(q, n)
+B = randn(q, n)
+H = Ct_A_kr_B(A, B)
+Cq  = CopyMatrix(q)
+@test size(H) == (q◺, n)
+@test H == Cq' * kr(A, B)
+bm = @benchmark Ct_A_kr_B!($H, $A, $B) setup=(fill!($H, 0))
+display(bm); println()
+@test allocs(bm) == 0
 end

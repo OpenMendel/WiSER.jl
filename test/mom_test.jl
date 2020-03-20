@@ -60,11 +60,15 @@ vlmm.Lγ  .= Lγ
 @show vlmm.τ
 @show vlmm.Lγ
 # evaluate objective (at truth)
-@info "obj/grad at true parameter values"
-@show mom_obj!(vlmm, true, true)
+@info "obj/grad/hessian at true parameter values"
+@show mom_obj!(vlmm, true, true, true)
 @show vlmm.∇β
 @show vlmm.∇τ
 @show vlmm.∇Lγ
+H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
+# display(H); println()
+@test norm(H - transpose(H)) < 1e-8
+@test all(eigvals(Symmetric(H)) .≥ 0)
 @info "type stability"
 #@code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
 #@code_warntype mom_obj!(vlmm, true)
@@ -72,7 +76,7 @@ vlmm.Lγ  .= Lγ
 # bm = @benchmark mom_obj!($vlmm.data[1], $vlmm.β, $vlmm.τ, $vlmm.Lγ, true)
 # display(bm)
 # @test allocs(bm) == 0
-bm = @benchmark mom_obj!($vlmm, true, true)
+bm = @benchmark mom_obj!($vlmm, true, true, true)
 display(bm); println()
 @test allocs(bm) == 0
 # @info "profile"
@@ -82,6 +86,7 @@ display(bm); println()
 end
 
 # @testset "fit! (start from truth)" begin
+# println(); println(); println()
 # @info "fit! (start from truth)"
 # for solver in [
 #     # KNITRO.KnitroSolver(outlev=3) # outlev 0-6
@@ -124,6 +129,7 @@ end
 # end
 
 @testset "fit! (start from LS fit)" begin
+println(); println(); println()
 @info "fit! (start from LS fit)"
 for solver in [
     # KNITRO.KnitroSolver(outlev=3) # outlev 0-6

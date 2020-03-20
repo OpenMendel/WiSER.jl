@@ -1,5 +1,10 @@
-export CopyMatrix, kron_axpy!, kr_axpy!, kr, mul!, vech
+export ◺, commutation, CopyMatrix, kron_axpy!, kr_axpy!, kr, mul!, vech,
+    Ct_At_kron_A_KC, Ct_At_kron_A_KC!, 
+    Ct_A_kron_B_C, Ct_A_kron_B_C!,
+    Ct_A_kr_B, Ct_A_kr_B!
 import LinearAlgebra: mul!
+
+@inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
 """
     kron_axpy!(A, X, Y)
@@ -45,14 +50,14 @@ function kr_axpy!(
     X::AbstractVecOrMat{T},
     Y::AbstractVecOrMat{T}
 ) where T <: Real
-    @assert size(A, 2) == size(X, 2)
+    @assert size(A, 2) == size(X, 2) == size(Y, 2)
     m, n, p = size(A, 1), size(A, 2), size(X, 1)
     @inbounds for j in 1:n
         r = 1        
         for i in 1:m
             aij = A[i, j]
             for k in 1:p
-                Y[r, j] = aij * X[k, j]
+                Y[r, j] += aij * X[k, j]
                 r += 1
             end
         end
@@ -134,6 +139,11 @@ function vech!(v::AbstractVector, A::AbstractVecOrMat)
     v
 end
 
+function commutation(m::Integer, n::Integer)
+    A = reshape(1:(m * n), m, n)
+    Matrix(inv(Permutation(vec(A'))))
+end
+
 """
     vech(A::AbstractVecOrMat) -> AbstractVector
 
@@ -142,4 +152,91 @@ Return the entries from lower triangular part of `A` as a vector.
 function vech(A::AbstractVecOrMat)
     m, n = size(A, 1), size(A, 2)
     vech!(similar(A, n * m - (n * (n - 1)) >> 1), A)
+end
+
+"""
+    Ct_At_kron_A_KC!(H, A, B)
+
+Overwrite `H` by `H + C'(A'⊗A)KC`, where `K` is the commutation matrix and 
+`C` is the copying matrix.
+"""
+function Ct_At_kron_A_KC!(H::AbstractMatrix, A::AbstractMatrix)
+    q = size(A, 1)
+    @assert size(A, 2) == q
+    @assert size(H, 1) == size(H, 2) == (q * (q + 1)) >> 1
+    j = 1
+    @inbounds for w in 1:q, s in w:q
+        i = 1
+        for r in 1:q, v in r:q
+            H[i, j] += A[s, r] * A[v, w]
+            i += 1
+        end
+        j += 1
+    end
+    H
+end
+
+function Ct_At_kron_A_KC(A)
+    n◺ = ◺(size(A, 1))
+    H = zeros(eltype(A), n◺, n◺)
+    Ct_At_kron_A_KC!(H, A)
+end
+
+"""
+    Ct_A_kron_B_C!(H, A, B)
+
+Overwrite `H` by `H + C'(A⊗B)C`, where `C` is the copying matrix.
+"""
+function Ct_A_kron_B_C!(
+    H::AbstractMatrix, 
+    A::AbstractMatrix,
+    B::AbstractMatrix,
+    )
+    q = size(A, 1)
+    @assert size(A, 2) == size(B, 1) == size(B, 2) == q
+    j = 1
+    @inbounds for s in 1:q, w in s:q
+        i = 1
+        for r in 1:q, v in r:q
+            H[i, j] += A[r, s] * B[v, w]
+            i += 1
+        end
+        j += 1
+    end
+    H
+end
+
+function Ct_A_kron_B_C(A, B)
+    n◺ = ◺(size(A, 1))
+    H = zeros(eltype(A), n◺, n◺)
+    Ct_A_kron_B_C!(H, A, B)
+end
+
+"""
+    Ct_A_kr_B!(H, A, B)
+
+Overwrite `H` by `H + C'(A⊙B)`, where `C` is the copying matrix and `⊙` is the 
+Khatri-Rao (column-wise Kronecker) product.
+"""
+function Ct_A_kr_B!(H, A, B)
+    @assert size(A) == size(B)
+    (q, n) = size(A)    
+    @inbounds for c in 1:n
+        r = 1
+        for ia in 1:q
+            a = A[ia, c]
+            for ib in ia:q
+                H[r, c] += a * B[ib, c]
+                r += 1
+            end
+        end
+    end
+    H
+end
+
+function Ct_A_kr_B(A, B)
+    @assert size(A) == size(B)
+    (q, n) = size(A)
+    H = zeros(eltype(A), ◺(q), n)
+    Ct_A_kr_B!(H, A, B)
 end

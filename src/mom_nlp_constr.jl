@@ -25,9 +25,9 @@ function fit!(
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
     # diagonal entries of cholesky factor should be >= 0
     if m.Lγ[1, 1] < 0
-        m.Lγ .*= -1
+        lmul!(-1, m.Lγ)
     end
-    mom_obj!(m, true, true)
+    mom_obj!(m, true, true, true)
     m
 end
 
@@ -79,20 +79,20 @@ function MathProgBase.initialize(
     requested_features::Vector{Symbol}
     )
     for feat in requested_features
-        if !(feat in [:Grad])
+        if !(feat in [:Grad, :Hess])
             error("Unsupported feature $feat")
         end
     end
 end
 
-MathProgBase.features_available(m::VarLmmModel) = [:Grad]
+MathProgBase.features_available(m::VarLmmModel) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
     m::VarLmmModel, 
     par::Vector
     )
     optimpar_to_modelpar!(m, par)
-    mom_obj!(m, false, false)
+    mom_obj!(m, false, false, false)
 end
 
 function MathProgBase.eval_grad_f(
@@ -102,7 +102,7 @@ function MathProgBase.eval_grad_f(
     )
     q, l = m.q, m.l
     optimpar_to_modelpar!(m, par) 
-    obj = mom_obj!(m, true, false)
+    obj = mom_obj!(m, true, false, false)
     # gradient wrt τ
     copyto!(grad, m.∇τ)
     # gradient wrt Lγ
@@ -114,7 +114,48 @@ function MathProgBase.eval_grad_f(
     obj
 end
 
-MathProgBase.eval_g(m::VarLmmModel, g, par) = fill!(g, 0)
+MathProgBase.eval_g(m::VarLmmModel, g, par) = nothing
+MathProgBase.jac_structure(m::VarLmmModel) = Int[], Int[]
+MathProgBase.eval_jac_g(m::VarLmmModel, J, par) = nothing
+
+function MathProgBase.hesslag_structure(m::VarLmmModel)
+    # our Hessian is a dense matrix, work on the upper triangular part
+    npar = m.l + ◺(m.q)
+    arr1 = Vector{Int}(undef, ◺(npar))
+    arr2 = Vector{Int}(undef, ◺(npar))
+    idx = 1
+    for j in 1:npar
+        for i in 1:j
+            arr1[idx] = i
+            arr2[idx] = j
+            idx += 1
+        end
+    end
+    return (arr1, arr2)
+end
+
+function MathProgBase.eval_hesslag(m::VarLmmModel, H::Vector{T},
+    par::Vector{T}, σ::T, μ::Vector{T}) where {T}    
+    l, q◺ = m.l, ◺(m.q)
+    optimpar_to_modelpar!(m, par)
+    mom_obj!(m, true, true, false)
+    idx = 1
+    @inbounds for j in 1:l, i in 1:j
+        H[idx] = m.Hττ[i, j]
+        idx += 1
+    end
+    @inbounds for j in 1:q◺
+        for i in 1:l
+            H[idx] = m.HτLγ[i, j]
+            idx += 1
+        end
+        for i in 1:j
+            H[idx] = m.HLγLγ[i, j]
+            idx += 1
+        end
+    end
+    lmul!(σ, H)
+end
 
 """
     init_ls!(m::VarLMM)
@@ -128,8 +169,8 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     xtx = zeros(T, p, p)
     xty = zeros(T, p)
     for i in eachindex(m.data)
-        xtx .+= m.data[i].X'm.data[i].X
-        xty .+= m.data[i].X'm.data[i].y
+        xtx .+= m.data[i].Xt * transpose(m.data[i].Xt)
+        xty .+= m.data[i].Xt * m.data[i].y
     end
     copy!(m.β, cholesky(Symmetric(xtx)) \ xty)
     update_res!(m)
@@ -148,9 +189,9 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     ztz2 = zeros(T, q * q, q * q)
     ztr2 = zeros(T, q * q)
     for i in eachindex(m.data)
-        ztz    = m.data[i].Z'm.data[i].Z 
+        ztz    = m.data[i].ztz 
         ztz2 .+= kron(ztz, ztz)
-        ztr    = m.data[i].Z'm.data[i].res
+        ztr    = m.data[i].Zt * m.data[i].res
         ztr2 .+= kron(ztr, ztr)
     end
     Σγ = reshape(cholesky(Symmetric(ztz2)) \ ztr2, (q, q))
