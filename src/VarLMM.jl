@@ -133,7 +133,7 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
 end
 
 include("mom.jl")
-include("mom_nlp_constr.jl")
+include("mom_nlp.jl")
 # include("mom_nlp_unconstr.jl")
 include("df.jl")
 include("multivariate_calculus.jl")

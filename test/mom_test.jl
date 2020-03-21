@@ -13,9 +13,12 @@ obsvec = Vector{VarLmmObs{Float64}}(undef, m)
 # true parameter values
 βtrue = [0.1; 6.5; -3.5; 1.0; 5]
 τtrue = [-1.5; 1.5; -0.5; zeros(l - 3)]
-Σγ    = Matrix(Diagonal([2.0; 1.2; rand(q - 2)]))
+Σγ    = Matrix(Diagonal([2.0; 1.2; rand(q - 2)])) # full rank case
 δγω   = [0.2; 0.1; rand(q - 2) ./ 10]
 σω    = [1.0]
+# Σγ    = Matrix(Diagonal([2.0; 1.2; zeros(q - 2)])) # singular case
+# δγω   = zeros(q)
+# σω    = [0.0]
 Σγω   = [Σγ δγω; δγω' σω]
 Lγω   = cholesky(Symmetric(Σγω), check = false).L
 Lγ    = Lγω[1:q, 1:q]
@@ -150,7 +153,7 @@ for solver in [
     @time init_ls!(vlmm)
     @show vlmm.β
     @show vlmm.τ
-    @show vlmm.Lγ
+    println("vlmm.Lγ"); display(vlmm.Lγ); println()
     # fit
     @info "fittng ..."
     @info "obj at starting point"

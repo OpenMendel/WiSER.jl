@@ -11,10 +11,15 @@ function fit!(
     #solver=NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
     )
     q, l = m.q, m.l
-    npar = l + (q * (q + 1)) >> 1
+    npar = l + ◺(q)
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar)
     ub = fill( Inf, npar)
+    # offset = l
+    # for j in 1:q, i in j:q
+    #     i == j && (lb[offset] = 0)
+    #     offset += 1
+    # end
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
     par0 = zeros(npar)
