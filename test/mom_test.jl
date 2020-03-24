@@ -2,12 +2,12 @@ using BenchmarkTools, Distributions, InteractiveUtils
 using LinearAlgebra, Profile, Random, Test, VarLMM
 
 @info "generate data"
-Random.seed!(12)
+Random.seed!(123)
 # dimensions
 m  = 6000 # number of individuals
 ns = rand(5:11, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
-q  = 5    # number of random effects, including intercept
+q  = 3    # number of random effects, including intercept
 l  = 5    # number of WS variance covariates, including intercept
 obsvec = Vector{VarLmmObs{Float64}}(undef, m)
 # true parameter values
@@ -52,82 +52,39 @@ end
 # form VarLmmModel
 vlmm = VarLmmModel(obsvec)
 
-@testset "mom_obj!" begin
-# set parameter values to be the truth
-copy!(vlmm.β, βtrue)
-copy!(vlmm.τ, τtrue)
-vlmm.τ[1] = τtrue[1] + 0.5(abs2(lω) + abs2(norm(lγω + Lγ'lγω)))
-vlmm.Lγ  .= Lγ
-@show vlmm.β
-@show vlmm.τ
-@show vlmm.Lγ
-# evaluate objective (at truth)
-@info "obj/grad/hessian at true parameter values"
-@show mom_obj!(vlmm, true, true, true)
-@show vlmm.∇β
-@show vlmm.∇τ
-@show vlmm.∇Lγ
-H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
-# display(H); println()
-@test norm(H - transpose(H)) / norm(H) < 1e-8
-@test all(eigvals(Symmetric(H)) .≥ 0)
-@info "type stability"
-#@code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-#@code_warntype mom_obj!(vlmm, true)
-@info "benchmark"
-# bm = @benchmark mom_obj!($vlmm.data[1], $vlmm.β, $vlmm.τ, $vlmm.Lγ, true)
-# display(bm)
-# @test allocs(bm) == 0
-bm = @benchmark mom_obj!($vlmm, true, true, true)
-display(bm); println()
-@test allocs(bm) == 0
-# @info "profile"
-# Profile.clear()
-# @profile @btime mom_obj!($vlmm, true, true)
-# Profile.print(format=:flat)
-end
-
-# @testset "fit! (start from truth)" begin
-# println(); println(); println()
-# @info "fit! (start from truth)"
-# for solver in [
-#     # KNITRO.KnitroSolver(outlev=3) # outlev 0-6
-#     Ipopt.IpoptSolver(print_level=3)
-#     # NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=10000)
-#     # NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
-#     # NLopt.NLoptSolver(algorithm=:LD_LBFGS, maxeval=10000)
-#     # NLopt.NLoptSolver(algorithm=:LN_BOBYQA, maxeval=10000)
-#     ]
-#     println("----------")
-#     @show solver
-#     println("----------")
-#     # re-set starting point to truth
-#     copy!(vlmm.β, βtrue)
-#     copy!(vlmm.τ, τtrue)
-#     vlmm.τ[1] = τtrue[1] + 0.5(abs2(lω) + abs2(norm(lγω + Lγ'lγω)))
-#     vlmm.Lγ  .= Lγ
-#     @show vlmm.β
-#     @show vlmm.τ
-#     @show vlmm.Lγ
-#     # fit
-#     @info "obj at starting point"
-#     @show mom_obj!(vlmm)
-#     @time VarLMM.fit!(vlmm, solver)
-#     @info "obj at solution"
-#     @show mom_obj!(vlmm)
-#     @info "estimates at solution"
-#     println("β")
-#     display([βtrue vlmm.β]); println()
-#     println("τ")
-#     display([τtrue vlmm.τ]); println()
-#     println("Lγ")
-#     display(vlmm.Lγ); println()
-#     display(Lγ); println()
-#     @info "gradient at solution"
-#     @show vlmm.∇β
-#     @show vlmm.∇τ
-#     @show vlmm.∇Lγ
-# end
+# @testset "mom_obj!" begin
+# # set parameter values to be the truth
+# copy!(vlmm.β, βtrue)
+# copy!(vlmm.τ, τtrue)
+# vlmm.τ[1] = τtrue[1] + 0.5(abs2(lω) + abs2(norm(lγω + Lγ'lγω)))
+# vlmm.Lγ  .= Lγ
+# @show vlmm.β
+# @show vlmm.τ
+# @show vlmm.Lγ
+# # evaluate objective (at truth)
+# @info "obj/grad/hessian at true parameter values"
+# @show mom_obj!(vlmm, true, true, true)
+# @show vlmm.∇β
+# @show vlmm.∇τ
+# @show vlmm.∇Lγ
+# H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
+# # display(H); println()
+# @test norm(H - transpose(H)) / norm(H) < 1e-8
+# @test all(eigvals(Symmetric(H)) .≥ 0)
+# @info "type stability"
+# #@code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
+# #@code_warntype mom_obj!(vlmm, true)
+# @info "benchmark"
+# # bm = @benchmark mom_obj!($vlmm.data[1], $vlmm.β, $vlmm.τ, $vlmm.Lγ, true)
+# # display(bm)
+# # @test allocs(bm) == 0
+# bm = @benchmark mom_obj!($vlmm, true, true, true)
+# display(bm); println()
+# # @test allocs(bm) == 0
+# # @info "profile"
+# # Profile.clear()
+# # @profile @btime mom_obj!($vlmm, true, true)
+# # Profile.print(format=:flat)
 # end
 
 @testset "fit! (start from LS fit)" begin
@@ -173,5 +130,15 @@ for solver in [
     @show vlmm.∇β
     @show vlmm.∇τ
     @show vlmm.∇Lγ
+    @info "res2 expwτ diag(ZLLtZt)"
+    for i in 1:5
+        display([vlmm.data[i].res2 vlmm.data[i].expwτ vlmm.data[i].zlltzt_dg]); println()
+    end
+    # re-fit β by weighted least squares
+    @info "re-fit by WLS"
+    init_wls!(vlmm) # warm up
+    @time init_wls!(vlmm)
+    println("β")
+    display([βtrue vlmm.β]); println()
 end
 end

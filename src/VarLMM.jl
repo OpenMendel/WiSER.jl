@@ -8,7 +8,7 @@ import DataFrames: DataFrame
 @reexport using NLopt
 
 export VarLmmObs, VarLmmModel
-export DataFrame, fit!, init_ls!, mom_obj!, update_res!
+export DataFrame, fit!, init_ls!, init_wls!, mom_obj!, update_res!
 
 """
     VarLmmObs
@@ -18,29 +18,33 @@ A realization of variance linear mixed model data instance.
 """
 struct VarLmmObs{T <: BlasReal}
     # data
-    y          :: Vector{T} # response 
+    y           :: Vector{T} # response 
     Xt          :: Matrix{T} # X should include a column of 1's
     Zt          :: Matrix{T} # Random effect covars
     Wt          :: Matrix{T} # Covariates that affect WS variability
     # working arrays
-    ∇β         :: Vector{T} # gradient wrt β
-    ∇τ         :: Vector{T} # gradient wrt τ
-    ∇Lγ        :: Matrix{T} # gradient wrt L cholesky factor 
-    Hττ        :: Matrix{T} # hessian
-    HτLγ       :: Matrix{T}
-    HLγLγ      :: Matrix{T}
-    res        :: Vector{T} # residual vector
-    res2       :: Vector{T} # residual vector.^2
-    resnrm2    :: Vector{T} # sum of residual squares
-    expwτ      :: Vector{T} # hold exp.(W * τ)
-    ztz        :: Matrix{T} # Z'Z
-    ztres      :: Vector{T} # Z'res
-    zlltzt_dg  :: Vector{T}
-    storage_n1 :: Vector{T}
-    storage_q1 :: Vector{T}
-    storage_qn :: Matrix{T}
-    storage_ln :: Matrix{T}    
-    storage_qq :: Matrix{T}
+    ∇β          :: Vector{T} # gradient wrt β
+    ∇τ          :: Vector{T} # gradient wrt τ
+    ∇Lγ         :: Matrix{T} # gradient wrt L cholesky factor 
+    Hττ         :: Matrix{T} # hessian
+    HτLγ        :: Matrix{T}
+    HLγLγ       :: Matrix{T}
+    res         :: Vector{T} # residual vector
+    res2        :: Vector{T} # residual vector.^2
+    resnrm2     :: Vector{T} # sum of residual squares
+    expwτ       :: Vector{T} # hold exp.(W * τ)
+    ztz         :: Matrix{T} # Z'Z
+    ztres       :: Vector{T} # Z'res
+    zlltzt_dg   :: Vector{T}
+    storage_n1  :: Vector{T}
+    storage_p1  :: Vector{T}
+    storage_q1  :: Vector{T}
+    storage_pn  :: Matrix{T}
+    storage_qn  :: Matrix{T}
+    storage_ln  :: Matrix{T}
+    storage_pp  :: Matrix{T}    
+    storage_qq  :: Matrix{T}
+    storage_qp  :: Matrix{T}
     storage_q◺n :: Matrix{T}
 end
 
@@ -67,10 +71,14 @@ function VarLmmObs(
     ztres       = Vector{T}(undef, q)
     zlltzt_dg   = Vector{T}(undef, n)
     storage_n1  = Vector{T}(undef, n)
+    storage_p1  = Vector{T}(undef, p)
     storage_q1  = Vector{T}(undef, q)
+    storage_pn  = Matrix{T}(undef, p, n)
     storage_qn  = Matrix{T}(undef, q, n)
     storage_ln  = Matrix{T}(undef, l, n)
+    storage_pp  = Matrix{T}(undef, p, p)
     storage_qq  = Matrix{T}(undef, q, q)
+    storage_qp  = Matrix{T}(undef, q, p)
     storage_q◺n = Matrix{T}(undef, q◺, n)
     # constructor
     VarLmmObs{T}(
@@ -78,8 +86,9 @@ function VarLmmObs(
         ∇β, ∇τ, ∇Lγ,
         Hττ, HτLγ, HLγLγ,
         res, res2, resnrm2, expwτ, ztz, ztres, zlltzt_dg,
-        storage_n1, storage_q1,
-        storage_qn, storage_ln, storage_qq, storage_q◺n)
+        storage_n1, storage_p1, storage_q1,
+        storage_pn, storage_qn, storage_ln, 
+        storage_pp, storage_qq, storage_qp, storage_q◺n)
 end
 
 """
