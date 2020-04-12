@@ -130,7 +130,14 @@ function mom_obj!(
         obs.∇Lγ .= -2obs.Zt * VinvRVinv * transpose(obs.Zt) * Lγ
     end
     if needhess
-        # TODO
+        obs.Hττ   .= obs.Wt * Diagonal(obs.expwτ) * (obs.wtmat .* obs.wtmat) *
+            Diagonal(obs.expwτ) * transpose(obs.Wt)
+        obs.HτLγ  .= 2obs.Wt * Diagonal(obs.expwτ) * 
+            transpose(Ct_A_kr_B(Lγ * obs.Zt * obs.wtmat, obs.Zt * obs.wtmat))
+        obs.HLγLγ .= 
+        2Ct_A_kron_B_C(Lγ * obs.Zt * obs.wtmat * transpose(obs.Zt) * Lγ, 
+                       obs.Zt * obs.wtmat * transpose(obs.Zt)) + 
+        2Ct_At_kron_A_KC(Lγ * obs.Zt * obs.wtmat * transpose(obs.Zt))
     end
     obj
 end
