@@ -71,16 +71,16 @@ vlmm = VarLmmModel(obsvec)
 # # display(H); println()
 # @test norm(H - transpose(H)) / norm(H) < 1e-8
 # @test all(eigvals(Symmetric(H)) .≥ 0)
-# @info "type stability"
-# #@code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-# #@code_warntype mom_obj!(vlmm, true)
+# # @info "type stability"
+# # @code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
+# # @code_warntype mom_obj!(vlmm, true)
 # @info "benchmark"
 # # bm = @benchmark mom_obj!($vlmm.data[1], $vlmm.β, $vlmm.τ, $vlmm.Lγ, true)
 # # display(bm)
 # # @test allocs(bm) == 0
 # bm = @benchmark mom_obj!($vlmm, true, true, true)
 # display(bm); println()
-# # @test allocs(bm) == 0
+# @test allocs(bm) == 0
 # # @info "profile"
 # # Profile.clear()
 # # @profile @btime mom_obj!($vlmm, true, true)
@@ -92,14 +92,15 @@ println(); println(); println()
 @info "fit! (start from LS fit)"
 for solver in [
     # KNITRO.KnitroSolver(outlev=3) # outlev 0-6
-    Ipopt.IpoptSolver(print_level = 3)
+    Ipopt.IpoptSolver(print_level = 3),
+    # Ipopt.IpoptSolver(print_level = 3, hessian_approximation = "limited-memory"),
     # Ipopt.IpoptSolver(print_level = 3, obj_scaling_factor = 1 / m) # less accurae, grad at 10^{-1}
     # Ipopt.IpoptSolver(print_level = 3, mu_strategy = "adaptive") # same speek
     # Ipopt.IpoptSolver(print_level = 3, mehrotra_algorithm = "yes") # unstable
     # NLopt.NLoptSolver(algorithm = :LD_SLSQP, maxeval = 4000)
     # NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000)
     # NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000)
-    # NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 10000)
+    # NLopt.NLoptSolver(algorithm = :LN_BOBYQA, ftol_rel = 1e-12, ftol_abs = 1e-8, maxeval = 10000)
     ]
     println("----------")
     @show solver
@@ -130,15 +131,35 @@ for solver in [
     @show vlmm.∇β
     @show vlmm.∇τ
     @show vlmm.∇Lγ
-    @info "res2 expwτ diag(ZLLtZt)"
-    for i in 1:5
-        display([vlmm.data[i].res2 vlmm.data[i].expwτ vlmm.data[i].zlltzt_dg]); println()
-    end
+    # @info "res2 expwτ diag(ZLLtZt)"
+    # for i in 1:5
+    #     display([vlmm.data[i].res2 vlmm.data[i].expwτ vlmm.data[i].zlltzt_dg]); println()
+    # end
     # re-fit β by weighted least squares
     @info "re-fit by WLS"
     init_wls!(vlmm) # warm up
     @time init_wls!(vlmm)
+    update_wtmat!(vlmm)
+    #display(vlmm.data[1].wtmat); println()
+    #@show eigvals(vlmm.data[1].wtmat)
+    @info "fittng WLS..."
+    vlmm.weighted[1] = true
+    @info "obj at starting point"
+    @show mom_obj!(vlmm)
+    @time VarLMM.fit!(vlmm, solver)
+    @info "obj at solution"
+    @show mom_obj!(vlmm, true, true)
+    @info "estimates at solution"
     println("β")
     display([βtrue vlmm.β]); println()
+    println("τ")
+    display([τtrue vlmm.τ]); println()
+    println("Lγω")
+    display(vlmm.Lγ); println()
+    display(Lγ); println()
+    @info "gradient at solution"
+    @show vlmm.∇β
+    @show vlmm.∇τ
+    @show vlmm.∇Lγ
 end
 end

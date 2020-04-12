@@ -10,6 +10,7 @@ function mom_obj!(
     β         :: Vector{T},
     τ         :: Vector{T},
     Lγ        :: Matrix{T}, # must be lower triangular
+              :: Val{false}, # un-weighted fitting    
     needgrad  :: Bool = true,
     needhess  :: Bool = true,
     updateres :: Bool = true
@@ -104,11 +105,41 @@ function mom_obj!(
     obj
 end
 
+function mom_obj!(
+    obs       :: VarLmmObs{T},
+    β         :: Vector{T},
+    τ         :: Vector{T},
+    Lγ        :: Matrix{T}, # must be lower triangular
+              :: Val{true}, # weighted fitting
+    needgrad  :: Bool = true,
+    needhess  :: Bool = true,
+    updateres :: Bool = true,
+    ) where T <: BlasReal
+    # form Ri
+    R = transpose(obs.Zt) * Lγ * transpose(Lγ) * obs.Zt
+    mul!(obs.expwτ, transpose(obs.Wt), τ)
+    for j in 1:size(obs.Xt, 2)
+        obs.expwτ[j] = exp(obs.expwτ[j])
+        R[j, j] += obs.expwτ[j]
+    end
+    R .= obs.res * transpose(obs.res) .- R
+    VinvRVinv = obs.wtmat * R * obs.wtmat
+    obj = (1//2)dot(VinvRVinv, R)
+    if needgrad
+        obs.∇τ  .= - obs.Wt * (obs.expwτ .* diag(VinvRVinv))
+        obs.∇Lγ .= -2obs.Zt * VinvRVinv * transpose(obs.Zt) * Lγ
+    end
+    if needhess
+        # TODO
+    end
+    obj
+end
+
 """
     mom_obj!(m::VarLMM, needgrad::Bool, needhess:Bool, updateres::Bool)
 
 Calculate the objective function of a `VarLMM` object and optionally the 
-graudient and hessian.
+gradient and hessian.
 """
 function mom_obj!(
     m         :: VarLmmModel{T},
@@ -129,9 +160,9 @@ function mom_obj!(
         fill!(m.HLγLγ, 0)
     end
     for i in eachindex(m.data)
-        obj += mom_obj!(m.data[i], m.β, m.τ, m.Lγ, needgrad, needhess, updateres)
+        obj += mom_obj!(m.data[i], m.β, m.τ, m.Lγ, Val(m.weighted[1]),
+            needgrad, needhess, updateres)
         if needgrad
-            # BLAS.axpy!(T(1), m.data[i].∇β   , m.∇β )
             BLAS.axpy!(T(1), m.data[i].∇τ   , m.∇τ )
             BLAS.axpy!(T(1), m.data[i].∇Lγ  , m.∇Lγ)
         end
@@ -173,3 +204,26 @@ function update_res!(m::VarLmmModel{T}) where T <: BlasReal
     nothing
 end
 
+"""
+    update_wtmat!(m::VarLmmModel)
+
+Update the observation weight matrix according to the current parameter values 
+in and `VarLmmModel` object `m`.
+
+TODO: this is very inefficient code; just for prototyping.
+"""
+function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
+    for obs in m.data
+        # form Vi
+        obs.wtmat .= transpose(obs.Zt) * m.Lγ * transpose(m.Lγ) * obs.Zt
+        mul!(obs.expwτ, transpose(obs.Wt), m.τ)
+        for j in 1:size(obs.Xt, 2)
+            obs.wtmat[j, j] += exp(obs.expwτ[j])
+        end
+        # invert Vi
+        LAPACK.potrf!('U', obs.wtmat)
+        LAPACK.potri!('U', obs.wtmat)
+        copytri!(obs.wtmat, 'U')
+    end
+    nothing
+end

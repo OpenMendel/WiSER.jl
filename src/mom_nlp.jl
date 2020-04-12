@@ -87,13 +87,13 @@ function MathProgBase.initialize(
     requested_features::Vector{Symbol}
     )
     for feat in requested_features
-        if !(feat in [:Grad, :Hess])
+        if !(feat in [:Grad])
             error("Unsupported feature $feat")
         end
     end
 end
 
-MathProgBase.features_available(m::VarLmmModel) = [:Grad, :Hess]
+MathProgBase.features_available(m::VarLmmModel) = [:Grad]
 
 function MathProgBase.eval_f(
     m::VarLmmModel, 

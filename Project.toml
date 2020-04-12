@@ -13,9 +13,10 @@ MathProgBase = "fdba3010-5040-5b88-9595-932c9decdf73"
 NLopt = "76087f3c-5699-56af-9a33-bf431cd00edd"
 Permutations = "2ae35dd2-176d-5d53-8349-f30d82d94d4f"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
-Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+WoodburyMatrices = "efce3f68-66dc-5838-9240-27a6d6f5f9b6"
 
 [compat]
 Distributions = ">=0.16.0"
@@ -26,8 +27,8 @@ StatsModels = ">=0.6.0"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 Profile = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["BenchmarkTools", "InteractiveUtils", "Profile", "Random", "Test"]

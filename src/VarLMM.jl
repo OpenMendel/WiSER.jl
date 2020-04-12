@@ -1,14 +1,14 @@
 module VarLMM
 
 using DataFrames, Distributions, LinearAlgebra, MathProgBase
-using Permutations, Reexport, Statistics, StatsModels
+using Permutations, Reexport, Statistics, StatsModels, WoodburyMatrices
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
 
 export VarLmmObs, VarLmmModel
-export DataFrame, fit!, init_ls!, init_wls!, mom_obj!, update_res!
+export DataFrame, fit!, init_ls!, init_wls!, mom_obj!, update_res!, update_wtmat!
 
 """
     VarLmmObs
@@ -46,6 +46,8 @@ struct VarLmmObs{T <: BlasReal}
     storage_qq  :: Matrix{T}
     storage_qp  :: Matrix{T}
     storage_q◺n :: Matrix{T}
+    # weight matrix
+    wtmat       :: AbstractMatrix{T}
 end
 
 function VarLmmObs(
@@ -88,7 +90,8 @@ function VarLmmObs(
         res, res2, resnrm2, expwτ, ztz, ztres, zlltzt_dg,
         storage_n1, storage_p1, storage_q1,
         storage_pn, storage_qn, storage_ln, 
-        storage_pp, storage_qq, storage_qp, storage_q◺n)
+        storage_pp, storage_qq, storage_qp, storage_q◺n,
+        Matrix{T}(I, n, n))
 end
 
 """
@@ -96,6 +99,7 @@ end
 
 Variance linear mixed model, which contains a vector of 
 `VarLmmObs` as data, model parameters, and working arrays.
+
 TODO: function documentation
 """
 struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
@@ -115,6 +119,8 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     Hττ  :: Matrix{T}
     HτLγ :: Matrix{T}
     HLγLγ:: Matrix{T}
+    # weighted model or not
+    weighted :: Vector{Bool}
 end
 
 function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
@@ -133,12 +139,13 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
     Hττ   = Matrix{T}(undef, l, l)
     HτLγ  = Matrix{T}(undef, l, q◺)
     HLγLγ = Matrix{T}(undef, q◺, q◺)
+    # weighted fitting or not
     # constructor
     VarLmmModel{T}(
         obsvec, p, q, l,
         β,  τ,  Lγ,
         ∇β, ∇τ, ∇Lγ,
-        Hττ, HτLγ, HLγLγ)
+        Hττ, HτLγ, HLγLγ, [false])
 end
 
 include("mom.jl")
