@@ -217,19 +217,43 @@ end
 Update the observation weight matrix according to the current parameter values 
 in and `VarLmmModel` object `m`.
 
-TODO: this is very inefficient code; just for prototyping.
 """
 function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
+    # form Vi inverse according to Woodbury Formula
+    q = size(m.Lγ, 1)
     for obs in m.data
-        # form Vi
-        obs.wtmat .= transpose(obs.Zt) * m.Lγ * transpose(m.Lγ) * obs.Zt
+        fill!(obs.wtmat, T(0))
         mul!(obs.expwτ, transpose(obs.Wt), m.τ)
-        for j in 1:size(obs.Xt, 2)
-            obs.wtmat[j, j] += exp(obs.expwτ[j])
+        # Step 1: assemble Ip + Lt Zt diag(e^{-\eta_j}) Z L
+        # storage_qn = L' * Z'
+        copy!(obs.storage_qn, obs.Zt)
+        BLAS.trmm!('L', 'L', 'T', 'N', T(1), m.Lγ, obs.storage_qn)
+        # wtmat = Diagonal(e^{-Wτ})
+        @inbounds for j in 1:length(obs.expwτ)
+            obs.wtmat[j, j] = exp(-obs.expwτ[j])
         end
-        # invert Vi
-        LAPACK.potrf!('U', obs.wtmat)
-        LAPACK.potri!('U', obs.wtmat)
+        # storage_qn = Lt Zt Diagonal(e^{-Wτ})
+        BLAS.trmm!('R', 'L', 'N', 'N', T(1), obs.wtmat, obs.storage_qn) #faster than rmul!
+        # storage_qq = Lt Zt diag(e^{-wτ}) Z
+        mul!(obs.storage_qq, obs.storage_qn, transpose(obs.Zt))
+        #BLAS.gemm!('N', 'T', T(1), obs.storage_qn, obs.Zt, T(0), obs.storage_qq)
+        # storage_qq = Lt Zt diag(e^{-wτ}) Z L 
+        BLAS.trmm!('R', 'L', 'N', 'N', T(1), m.Lγ, obs.storage_qq)
+        # fewer allocs than computing Lt Zt diag(e^{-0.5wτ}) and using syrk
+        # storage_qq = Iq + Lt Zt diag(e^{-wτ}) Z L 
+        #BLAS.syrk!('U', 'N', T(1), obs.storage_qn, T(0), obs.storage_qq)
+        @inbounds for i in 1:q
+            obs.storage_qq[i, i] += 1.0
+        end
+        # Step 2: invert U^{-1} = (Ip + Lt Zt diag(e^{-Wt}) Z L)^{-1}: cholesky
+        cholesky!(Symmetric(obs.storage_qq))
+
+        # Step 3: get storange_qn = U'^{-1/2} Lt Zt Diagonal(e^{-Wt})
+        #storage_qn = Lt Zt Diagonal(e^{-Wτ})
+        BLAS.trsm!('L', 'U', 'T', 'N', T(1), obs.storage_qq, obs.storage_qn)
+        
+        #now form full matrix 
+        BLAS.syrk!('U', 'T', T(-1), obs.storage_qn, T(1), obs.wtmat)
         copytri!(obs.wtmat, 'U')
     end
     nothing

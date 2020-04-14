@@ -139,9 +139,10 @@ for solver in [
     @info "re-fit by WLS"
     init_wls!(vlmm) # warm up
     @time init_wls!(vlmm)
-    update_wtmat!(vlmm)
-    #display(vlmm.data[1].wtmat); println()
-    #@show eigvals(vlmm.data[1].wtmat)
+    update_wtmat!(vlmm) # warm up 
+    # @time update_wtmat!(vlmm)
+    # display(vlmm.data[1].wtmat); println()
+    # @show eigvals(vlmm.data[1].wtmat)
     @info "fittng WLS..."
     vlmm.weighted[1] = true
     @info "obj at starting point"
