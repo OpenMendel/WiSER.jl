@@ -140,13 +140,15 @@ for solver in [
     init_wls!(vlmm) # warm up
     @time init_wls!(vlmm)
     update_wtmat!(vlmm) # warm up 
-    # @time update_wtmat!(vlmm)
+    @time update_wtmat!(vlmm)
+    
     # display(vlmm.data[1].wtmat); println()
     # @show eigvals(vlmm.data[1].wtmat)
     @info "fittng WLS..."
     vlmm.weighted[1] = true
     @info "obj at starting point"
     @show mom_obj!(vlmm)
+    @time mom_obj!(vlmm)
     @time VarLMM.fit!(vlmm, solver)
     @info "obj at solution"
     @show mom_obj!(vlmm, true, true)
@@ -162,5 +164,9 @@ for solver in [
     @show vlmm.∇β
     @show vlmm.∇τ
     @show vlmm.∇Lγ
+    @show vlmm.HLγLγ
+    @show vlmm.HτLγ
+    @show vlmm.Hττ
+    
 end
 end
