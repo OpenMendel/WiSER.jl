@@ -119,6 +119,9 @@ for solver in [
     @time VarLMM.fit!(vlmm, solver)
     @info "obj at solution"
     @show mom_obj!(vlmm, true, true)
+    @time mom_obj!(vlmm)
+    bm = @benchmark mom_obj!($vlmm, true, true, true)
+    display(bm); println()
     @info "estimates at solution"
     println("β")
     display([βtrue vlmm.β]); println()
@@ -167,6 +170,8 @@ for solver in [
     @show vlmm.HLγLγ
     @show vlmm.HτLγ
     @show vlmm.Hττ
-    
+    @show mom_obj!(vlmm)
+    bm = @benchmark mom_obj!($vlmm, true, true, true)
+    display(bm); println()
 end
 end

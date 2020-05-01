@@ -185,7 +185,7 @@ function VarLmmObs(
     Zt_Vinv_Z   = Matrix{T}(undef, q, q)
     Zt_Vinv     = Matrix{T}(undef, q, n)
 
-    #added under mom !!! need to add stil 
+    #adntl storage not outlined
     Lt_Zt_Dinv_r = Vector{T}(undef, q)
     Zt_Dinv_Z_L = Matrix{T}(undef, q, q)
     Zt_U = Matrix{T}(undef, q, q)
