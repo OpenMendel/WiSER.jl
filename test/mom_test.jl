@@ -4,8 +4,8 @@ using LinearAlgebra, Profile, Random, Test, VarLMM
 @info "generate data"
 Random.seed!(123)
 # dimensions
-m  = 6000 # number of individuals
-ns = rand(5:11, m) # numbers of observations per individual
+m  = 800 # number of individuals
+ns = rand(800:1000, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
 q  = 3    # number of random effects, including intercept
 l  = 5    # number of WS variance covariates, including intercept
@@ -120,8 +120,8 @@ for solver in [
     @info "obj at solution"
     @show mom_obj!(vlmm, true, true)
     @time mom_obj!(vlmm)
-    bm = @benchmark mom_obj!($vlmm, true, true, true)
-    display(bm); println()
+    # bm = @benchmark mom_obj!($vlmm, true, true, true)
+    # display(bm); println()
     @info "estimates at solution"
     println("β")
     display([βtrue vlmm.β]); println()
@@ -173,5 +173,13 @@ for solver in [
     @show mom_obj!(vlmm)
     bm = @benchmark mom_obj!($vlmm, true, true, true)
     display(bm); println()
+    #under m = 800, ni = 800:1000
+    @test mom_obj!(vlmm, true, true, true) ≈ 3.933121364732631e8
+    @test vlmm.∇Lγ ≈ [-4.44089209e-15 -3.8136160e-14 1.02140518e-14; 
+    2.19824158e-14 -5.5511151e-15 -9.21485110e-14; 
+    1.421085471e-13 7.682743330e-14 -3.816946758e-13]
+    #Profile.clear()
+    #@profile @btime mom_obj!($vlmm, true, true, true)
+    #Profile.print(format=:flat)
 end
 end
