@@ -1,7 +1,8 @@
 module VarLMM
 
 using DataFrames, Distributions, LinearAlgebra, MathProgBase
-using Permutations, Reexport, Statistics, StatsModels, WoodburyMatrices
+using Permutations, Reexport, Statistics, StatsModels
+using LoopVectorization
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt

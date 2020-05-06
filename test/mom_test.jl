@@ -171,6 +171,7 @@ for solver in [
     @show vlmm.HτLγ
     @show vlmm.Hττ
     @show mom_obj!(vlmm)
+    #BenchmarkTools.DEFAULT_PARAMETERS.seconds = 15
     bm = @benchmark mom_obj!($vlmm, true, true, true)
     display(bm); println()
     #under m = 800, ni = 800:1000
@@ -178,8 +179,9 @@ for solver in [
     @test vlmm.∇Lγ ≈ [-4.44089209e-15 -3.8136160e-14 1.02140518e-14; 
     2.19824158e-14 -5.5511151e-15 -9.21485110e-14; 
     1.421085471e-13 7.682743330e-14 -3.816946758e-13]
-    #Profile.clear()
-    #@profile @btime mom_obj!($vlmm, true, true, true)
-    #Profile.print(format=:flat)
+    @test vlmm.∇τ ≈ [1.3699263945454732e-11, -8.898697188897131e-6, 8.625346106683196e-6, -1.2175565561989288e-5, 6.686536409006294e-6]
+    Profile.clear()
+    @profile @btime mom_obj!($vlmm, true, true, true)
+    Profile.print(format=:flat)
 end
 end

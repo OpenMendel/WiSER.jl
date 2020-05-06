@@ -128,7 +128,6 @@ function mom_obj!(
     updateres && update_res!(obs, β)
     if needgrad
         fill!(obs.∇τ, 0)
-        fill!(obs.∇Lγ, 0)
         fill!(obs.diagDVRV, 0)
     end
     if needhess 
@@ -155,9 +154,11 @@ function mom_obj!(
     obj += obs.rt_Dinv_r[1]^2 #1 
     obj -= 2 * obs.rt_UUt_r[1] * obs.rt_Dinv_r[1] #2 
     obj += obs.rt_UUt_r[1]^2 #7
-    @inbounds for j in 1:length(obs.expwτ)
-        expwtj = exp(obs.expwτ[j])
-        obs.expwτ[j] = expwtj
+    vmap!(exp, obs.expwτ, obs.expwτ) #reduced 200ms to 180ms 10%
+
+    @inbounds for j in 1:n
+        expwtj = obs.expwτ[j]#exp(obs.expwτ[j])
+        #obs.expwτ[j] = expwtj
         obj -= 2 * obs.Dinv_r[j]^2 * expwtj #3
         needgrad ? obs.diagDVRV[j] += obs.Dinv_r[j]^2 * expwtj : nothing #τ 1 
         obj += 2 * obs.rt_UUt[j] * expwtj * obs.Dinv_r[j] #4
@@ -169,25 +170,36 @@ function mom_obj!(
         obj -= 2 * obs.diagUUt_Dinv[j] * expwtj^2 #13
         needgrad ? obs.diagDVRV[j] += 2 * obs.diagUUt_Dinv[j] * expwtj^2 : nothing #τ 4
         needgrad ? obs.diagDVRV[j] += obs.rt_UUt[j]^2 * expwtj : nothing #τ 7
-        for k in 1:q
-            for i in 1:q #evalute/store U' * D * U in O(ni q^2)
-                obs.Ut_D_U[i, k] += obs.Ut[k, j] * obs.Ut[i, j] * expwtj
-            end
-        end
+        # for k in 1:q
+        #     for i in k:q #evalute/store U' * D * U in O(ni q^2)
+        #         obs.Ut_D_U[i, k] += obs.Ut[k, j] * obs.Ut[i, j] * expwtj
+        #     end
+        # end
+        # if needhess #storage_ln = Wt * D
+        #     for r in 1:l
+        #         obs.storage_ln[r, j] = obs.Wt[r, j] * expwtj 
+        #     end
+        # end
+    end
+    # copytri!(obs.Ut_D_U, 'L')
+    avxUtDU!(obs.Ut_D_U, obs.Ut, obs.expwτ, n, q)
+    if needhess
+        avxAD!(obs.storage_ln, obs.Wt, obs.expwτ, n, l)
     end
 
-    for j in 1:q  #j-i looping for memory access 
-        for i in 1:length(obs.expwτ)
+    @inbounds for j in 1:q  #j-i looping for memory access 
+        for i in 1:n
             obj += 2 * obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] # 14
             needgrad ? obs.diagDVRV[i] -= obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 5
             obj -= 2 * obs.UUt_Z_L[i, j] * obs.Dinv_Z_L[i, j] * obs.expwτ[i] # 15
             obj -= 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] # 17
             needgrad ? obs.diagDVRV[i] += 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] : nothing #τ 6
-            obj += 2 * obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] # 18
-            needgrad ? obs.diagDVRV[i] -= obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 9
+            obj18 = obs.UUt_Z_L[i, j]^2 * obs.expwτ[i]
+            needgrad ? obs.diagDVRV[i] -= obj18 : nothing #obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 9
+            obj += 2obj18#* obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] # 18
         end
     end
-    
+
     #obs.storage_qq = L'Z'UU'rr'DinvZL
     copyto!(obs.storage_qq, obs.Zt_UUt_rrt_Dinv_Z)
     BLAS.trmm!('L', 'L', 'T', 'N', T(1), Lγ, obs.storage_qq)
@@ -202,13 +214,15 @@ function mom_obj!(
     BLAS.gemm!('N', 'N', T(1), obs.Ut_D_U, obs.Ut, T(0), obs.storage_qn)
 
     if needgrad 
-        for j in 1:length(obs.expwτ)
-            for i in 1:q 
-                obs.diagDVRV[j] -= obs.storage_qn[i, j] * obs.Ut[i, j] * obs.expwτ[j] #τ 8
-            end
-        end
+        #avxdiagADB!(obs.diagDVRV, obs.storage_qn, obs.Ut, obs.expwτ)
+        avxdiagADB!(obs.diagDVRV, obs.storage_qn, obs.Ut, obs.expwτ)
+        # @inbounds for j in 1:n #avx will speed up
+        #     for i in 1:q 
+        #         obs.diagDVRV[j] -= obs.storage_qn[i, j] * obs.Ut[i, j] * obs.expwτ[j] #τ 8
+        #     end
+        # end
     end
-    for j in 1:q
+    @inbounds for j in 1:q
         obj -= 2 * obs.Lt_Zt_Dinv_r[j]^2 #5
         obj += 2 * obs.storage_qq[j, j] #10 
         obj -= 2 * obs.∇Lγ[j, j] # 11
@@ -238,12 +252,13 @@ function mom_obj!(
         BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.storage_qq)
         #∇Lγ = Z' * Vinv * Z * L * L' * Z' * Vinv * Z after next line
         BLAS.syrk!('U', 'N', T(1), obs.storage_qq, T(0), obs.∇Lγ)
-        @inbounds for j in 1:length(obs.expwτ)
-            sqrtej = sqrt(obs.expwτ[j])
-            for i in 1:q
-                obs.storage_qn[i, j] = sqrtej * obs.Zt_Vinv[i, j]
-            end
-        end
+        vmap!(sqrt, obs.storage_n1, obs.expwτ)
+        # @inbounds for j in 1:n
+        #     for i in 1:q
+        #         obs.storage_qn[i, j] = obs.storage_n1[j] * obs.Zt_Vinv[i, j]
+        #     end
+        # end
+        avxAD!(obs.storage_qn, obs.Zt_Vinv, obs.storage_n1, n, q)
         BLAS.syrk!('U', 'N',  T(1), obs.storage_qn, T(1), obs.∇Lγ)
         BLAS.syr!('U', T(-1), obs.Zt_Vinv_r, obs.∇Lγ)
         copytri!(obs.∇Lγ, 'U')
@@ -256,17 +271,16 @@ function mom_obj!(
     if needhess
         #wrt τ
         # Hττ = W' * D * Vinv .* Vinv * D  * W
-        fill!(obs.storage_ln, 0)
-        fill!(obs.Wt_D_Dinv, 0)
-        fill!(obs.Wt_D_sqrtdiagDinv_UUt, 0)
-        #storage_ln = Wt * D
-        for j in 1:length(obs.expwτ)
-            for i in 1:l
-                obs.storage_ln[i, j] += obs.Wt[i, j] * obs.expwτ[j]
-                obs.Wt_D_Dinv[i, j] += obs.Dinv[j] * obs.expwτ[j] * obs.Wt[i, j]
-                obs.Wt_D_sqrtdiagDinv_UUt[i, j] += obs.Wt[i, j] * obs.expwτ[j] * obs.sqrtDinv_UUt[j]
-            end
-        end 
+        
+        # storage_ln = Wt * D 
+        # @inbounds for j in 1:n
+        #     for i in 1:l
+        #         obs.Wt_D_Dinv[i, j] = obs.Dinv[j] * obs.storage_ln[i, j]
+        #         obs.Wt_D_sqrtdiagDinv_UUt[i, j] = obs.storage_ln[i, j] * obs.sqrtDinv_UUt[j]
+        #     end
+        # end 
+        avxAD!(obs.Wt_D_Dinv, obs.storage_ln, obs.Dinv, n, l)
+        avxAD!(obs.Wt_D_sqrtdiagDinv_UUt, obs.storage_ln, obs.sqrtDinv_UUt, n, l)
         BLAS.syrk!('U', 'N', T(1), obs.Wt_D_Dinv, T(0), obs.Hττ) #first term 
         BLAS.syrk!('U', 'N', T(-2), obs.Wt_D_sqrtdiagDinv_UUt, T(1), obs.Hττ) #second term 
         BLAS.gemm!('N', 'T', T(1), obs.storage_ln, obs.Ut_kr_Ut, T(0), obs.Wt_D_Ut_kr_Utt) 
@@ -396,6 +410,7 @@ function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
         @inbounds for j in 1:length(obs.expwτ)
             Dinvjj = exp(-obs.expwτ[j])
             obs.Dinv[j] = Dinvjj
+            Dinvjj = obs.Dinv[j]
             obs.Dinv_r[j] = Dinvjj * obs.res[j]
             obs.rt_Dinv_r[1] += Dinvjj * obs.res[j]^2
             for i in 1:q
@@ -455,9 +470,10 @@ function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
         copytri!(obs.Zt_UUt_rrt_UUt_Z, 'U')
 
         #for Hessian wrt τ
-        for j in 1:length(obs.expwτ)
-            obs.sqrtDinv_UUt[j] = sqrt(obs.diagUUt_Dinv[j])
-        end
+        # @inbounds for j in 1:length(obs.expwτ)
+        #     obs.sqrtDinv_UUt[j] = sqrt(obs.diagUUt_Dinv[j])
+        # end
+        vmap!(sqrt, obs.sqrtDinv_UUt, obs.diagUUt_Dinv)
         fill!(obs.Ut_kr_Ut, 0)
         kr_axpy!(obs.Ut, obs.Ut, obs.Ut_kr_Ut)
 
@@ -469,4 +485,46 @@ function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
         BLAS.gemv!('N', T(1), obs.Zt_Vinv, obs.res, T(0), obs.Zt_Vinv_r)
     end
     nothing
+end
+
+"""
+    avxUtDU!(UtDU, U, d, n, q)
+
+Updates UtDU with U'*D*U where U is nxq and d is the diagonal elements of the diagonal matrix D. 
+"""
+@inline function avxUtDU!(UtDU::Matrix{T}, Ut::Matrix{T}, d::Vector{T}, n::Int, q::Int) where T <: BlasReal
+    @avx for j ∈ 1:n
+        for k ∈ 1:q
+            for i in 1:q #evalute/store U' * D * U in O(ni q^2) where D is diagonal
+                UtDU[i, k] += Ut[k, j] * Ut[i, j] * d[j]
+            end
+        end
+    end
+end
+
+"""
+    avxAD!(UtDU, U, d, n, q)
+    
+Updates AD with A*D where A is qxn and d is the diagonal elements of the diagonal matrix D. 
+"""
+@inline function avxAD!(AD::Matrix{T}, A::Matrix{T}, d::Vector{T}, n::Int, q::Int) where T <: BlasReal
+    @avx for j ∈ 1:n
+        for i ∈ 1:q
+            AD[i, j] = A[i, j] * d[j]
+        end
+    end
+end
+
+"""
+avxdiagADB!(diagADB, A, B, d)
+    
+Updates avxdiagADB with diag(-A*D*B) where A and B are qxn and d is the diagonal elements of the diagonal matrix D. 
+"""
+@inline function avxdiagADB!(diagADB::Vector{T}, A::Matrix{T}, B::Matrix{T}, d::Vector{T}) where T <: BlasReal
+    q, n = size(A)
+    @avx for j in 1:n
+        for i in 1:q 
+            diagADB[j] -= A[i, j] * B[i, j] * d[j] #τ 8
+        end
+    end
 end
