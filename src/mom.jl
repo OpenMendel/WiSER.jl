@@ -81,7 +81,8 @@ function mom_obj!(
         BLAS.syrk!('U', 'N', T(-1),      obs.ztres, T(1), obs.∇Lγ)
         copytri!(obs.∇Lγ, 'U')
         # so far ∇Lγ holds ∇Σγ, now ∇Lγ = ∇Σγ * Lγ
-        BLAS.trmm!('R', 'L', 'N', 'N', T(2), Lγ, obs.∇Lγ)
+        #obs.∇Lγ = obs.∇Lγ * Lγ^-1, collect all then multiply by Lγ at model level. 
+        #BLAS.trmm!('R', 'L', 'N', 'N', T(2), Lγ, obs.∇Lγ)
     end
     ###########
     # hessian
@@ -133,9 +134,18 @@ function mom_obj!(
     if needhess 
         fill!(obs.Hττ, 0)
         fill!(obs.HτLγ, 0)
+        fill!(obs.storage_q◺n, 0)
     end
     # obs.expwτ = Wτ
-    mul!(obs.expwτ, transpose(obs.Wt), τ)
+    #mul!(obs.expwτ, transpose(obs.Wt), τ)
+    @avx for j ∈ 1:n #half counts as above in profiled code
+        wτ = zero(T)
+        for i ∈ 1:l
+            wτ += obs.Wt[i, j] * τ[i]
+        end
+        obs.expwτ[j] = wτ
+    end
+
     fill!(obs.Ut_D_U, 0) 
 
     #terms to compute and store 
@@ -154,7 +164,27 @@ function mom_obj!(
     obj += obs.rt_Dinv_r[1]^2 #1 
     obj -= 2 * obs.rt_UUt_r[1] * obs.rt_Dinv_r[1] #2 
     obj += obs.rt_UUt_r[1]^2 #7
-    vmap!(exp, obs.expwτ, obs.expwτ) #reduced 200ms to 180ms 10%
+    needgrad && vmap!(sqrtexp, obs.storage_n1, obs.expwτ) #∇Lγ
+    vmap!(exp, obs.expwτ, obs.expwτ) #reduced 200ms to 180ms 10% #can use map!() 
+    #avxUtDU!(obs.Ut_D_U, obs.Ut, obs.expwτ, n, q)
+    @avx for k in 1:n 
+        for j in 1:q 
+            for i in 1:q
+                obs.Ut_D_U[i, j] += obs.Ut[j, k] * obs.Ut[i, k] * obs.expwτ[k]
+            end
+        end
+    end
+
+    #storage_qn = Ut_D_U_Ut
+    BLAS.gemm!('N', 'N', T(1), obs.Ut_D_U, obs.Ut, T(0), obs.storage_qn)
+
+    if needgrad 
+        @avx for j in 1:n #avx speeds up
+            for i in 1:q 
+                obs.diagDVRV[j] -= obs.storage_qn[i, j] * obs.Ut[i, j] * obs.expwτ[j] #τ 8
+            end
+        end
+    end
 
     @inbounds for j in 1:n
         expwtj = obs.expwτ[j]#exp(obs.expwτ[j])
@@ -182,22 +212,53 @@ function mom_obj!(
         # end
     end
     # copytri!(obs.Ut_D_U, 'L')
-    avxUtDU!(obs.Ut_D_U, obs.Ut, obs.expwτ, n, q)
-    if needhess
-        avxAD!(obs.storage_ln, obs.Wt, obs.expwτ, n, l)
+    if needhess  #storage_ln = Wt * D #for Hττ and HτLγ
+        @avx for j in 1:n 
+            for i in 1:l
+                obs.storage_ln[i, j] = obs.Wt[i, j] * obs.expwτ[j]
+            end
+        end
     end
 
-    @inbounds for j in 1:q  #j-i looping for memory access 
+    # @avx for j in 1:q  #j-i looping for memory access 
+    #     for i in 1:n
+    #         obj += 2 * obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] # 14
+    #         #needgrad ? obs.diagDVRV[i] -= obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 5
+    #         obj -= 2 * obs.UUt_Z_L[i, j] * obs.Dinv_Z_L[i, j] * obs.expwτ[i] # 15
+    #         obj -= 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] # 17
+    #         #needgrad ? obs.diagDVRV[i] += 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] : nothing #τ 6
+    #         #obj18 = obs.UUt_Z_L[i, j]^2 * obs.expwτ[i]
+    #         #needgrad ? obs.diagDVRV[i] -= obj18 : nothing #obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 9
+    #         #obj += 2obj18#* obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] # 18
+    #         obj += 2 * obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] # 18
+
+    #     end
+    # end
+
+    @avx for j in 1:q  #j-i looping for memory access 
+        t1 = zero(T)
+        t2 = zero(T)
+        t3 = zero(T)
+        t4 = zero(T)
         for i in 1:n
-            obj += 2 * obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] # 14
-            needgrad ? obs.diagDVRV[i] -= obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 5
-            obj -= 2 * obs.UUt_Z_L[i, j] * obs.Dinv_Z_L[i, j] * obs.expwτ[i] # 15
-            obj -= 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] # 17
-            needgrad ? obs.diagDVRV[i] += 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] : nothing #τ 6
-            obj18 = obs.UUt_Z_L[i, j]^2 * obs.expwτ[i]
-            needgrad ? obs.diagDVRV[i] -= obj18 : nothing #obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 9
-            obj += 2obj18#* obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] # 18
+            t1 += 2 * obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] # 14
+            t2 -= 2 * obs.UUt_Z_L[i, j] * obs.Dinv_Z_L[i, j] * obs.expwτ[i] # 15
+            t3 -= 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] # 17
+            t4 += 2 * obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] # 18
         end
+        obj += t1 + t2 + t3 + t4
+    end
+
+    @avx for i in 1:n
+        t1 = zero(eltype(obs.diagDVRV))
+        t2 = zero(eltype(obs.diagDVRV))
+        t3 = zero(eltype(obs.diagDVRV))
+        for j in 1:q
+            t1 -= obs.Dinv_Z_L[i, j]^2 * obs.expwτ[i] #τ 5
+            t2 += 2 * obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] * obs.expwτ[i] #τ 6
+            t3 -= obs.UUt_Z_L[i, j]^2 * obs.expwτ[i]  #obs.UUt_Z_L[i, j]^2 * obs.expwτ[i] : nothing #τ 9
+        end
+        obs.diagDVRV[i] += t1 + t2 + t3
     end
 
     #obs.storage_qq = L'Z'UU'rr'DinvZL
@@ -210,18 +271,6 @@ function mom_obj!(
     BLAS.trmm!('L', 'L', 'T', 'N', T(1), Lγ, obs.∇Lγ)
     BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.∇Lγ) #for #11
 
-    #storage_qn = Ut_D_U_Ut
-    BLAS.gemm!('N', 'N', T(1), obs.Ut_D_U, obs.Ut, T(0), obs.storage_qn)
-
-    if needgrad 
-        #avxdiagADB!(obs.diagDVRV, obs.storage_qn, obs.Ut, obs.expwτ)
-        avxdiagADB!(obs.diagDVRV, obs.storage_qn, obs.Ut, obs.expwτ)
-        # @inbounds for j in 1:n #avx will speed up
-        #     for i in 1:q 
-        #         obs.diagDVRV[j] -= obs.storage_qn[i, j] * obs.Ut[i, j] * obs.expwτ[j] #τ 8
-        #     end
-        # end
-    end
     @inbounds for j in 1:q
         obj -= 2 * obs.Lt_Zt_Dinv_r[j]^2 #5
         obj += 2 * obs.storage_qq[j, j] #10 
@@ -252,17 +301,18 @@ function mom_obj!(
         BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.storage_qq)
         #∇Lγ = Z' * Vinv * Z * L * L' * Z' * Vinv * Z after next line
         BLAS.syrk!('U', 'N', T(1), obs.storage_qq, T(0), obs.∇Lγ)
-        vmap!(sqrt, obs.storage_n1, obs.expwτ)
-        # @inbounds for j in 1:n
-        #     for i in 1:q
-        #         obs.storage_qn[i, j] = obs.storage_n1[j] * obs.Zt_Vinv[i, j]
-        #     end
-        # end
-        avxAD!(obs.storage_qn, obs.Zt_Vinv, obs.storage_n1, n, q)
+        # obs.storage_qn = Zt_Vinv * sqrt.(D)
+        # vmap!(sqrt, obs.storage_n1, obs.expwτ)
+        @avx for j in 1:n
+            for i in 1:q
+                obs.storage_qn[i, j] = obs.storage_n1[j] * obs.Zt_Vinv[i, j]
+            end
+        end
         BLAS.syrk!('U', 'N',  T(1), obs.storage_qn, T(1), obs.∇Lγ)
         BLAS.syr!('U', T(-1), obs.Zt_Vinv_r, obs.∇Lγ)
         copytri!(obs.∇Lγ, 'U')
-        BLAS.trmm!('R', 'L', 'N', 'N', T(2), Lγ, obs.∇Lγ)
+        #obs.∇Lγ = obs.∇Lγ * Lγ^-1, collect all then multiply by Lγ at model level. 
+        #BLAS.trmm!('R', 'L', 'N', 'N', T(2), Lγ, obs.∇Lγ)
     end
 
     ###########
@@ -273,14 +323,12 @@ function mom_obj!(
         # Hττ = W' * D * Vinv .* Vinv * D  * W
         
         # storage_ln = Wt * D 
-        # @inbounds for j in 1:n
-        #     for i in 1:l
-        #         obs.Wt_D_Dinv[i, j] = obs.Dinv[j] * obs.storage_ln[i, j]
-        #         obs.Wt_D_sqrtdiagDinv_UUt[i, j] = obs.storage_ln[i, j] * obs.sqrtDinv_UUt[j]
-        #     end
-        # end 
-        avxAD!(obs.Wt_D_Dinv, obs.storage_ln, obs.Dinv, n, l)
-        avxAD!(obs.Wt_D_sqrtdiagDinv_UUt, obs.storage_ln, obs.sqrtDinv_UUt, n, l)
+        @avx for j in 1:n # @inbounds @simd 597 count vs 378 with @avx 
+            for i in 1:l
+                obs.Wt_D_Dinv[i, j] = obs.Dinv[j] * obs.storage_ln[i, j]
+                obs.Wt_D_sqrtdiagDinv_UUt[i, j] = obs.storage_ln[i, j] * obs.sqrtDinv_UUt[j]
+            end
+        end 
         BLAS.syrk!('U', 'N', T(1), obs.Wt_D_Dinv, T(0), obs.Hττ) #first term 
         BLAS.syrk!('U', 'N', T(-2), obs.Wt_D_sqrtdiagDinv_UUt, T(1), obs.Hττ) #second term 
         BLAS.gemm!('N', 'T', T(1), obs.storage_ln, obs.Ut_kr_Ut, T(0), obs.Wt_D_Ut_kr_Utt) 
@@ -294,8 +342,7 @@ function mom_obj!(
         # storage_q◺n = Cq' * (L'Z'(V^-1) ⊙ Z'(V^-1)) 
         copy!(obs.storage_qn, obs.Zt_Vinv)
         BLAS.trmm!('L', 'L', 'T', 'N', T(1), Lγ, obs.storage_qn)
-        Ct_A_kr_B!(fill!(obs.storage_q◺n, 0), obs.storage_qn, obs.Zt_Vinv)
-
+        Ct_A_kr_B!(obs.storage_q◺n, obs.storage_qn, obs.Zt_Vinv)
         BLAS.gemm!('N', 'T', T(2), obs.storage_ln, obs.storage_q◺n, T(0), obs.HτLγ)
 
         #wrt HLγLγ
@@ -354,6 +401,10 @@ function mom_obj!(
             BLAS.axpy!(T(1), m.data[i].HLγLγ, m.HLγLγ)
         end
     end
+    #Multiply m.∇Lγ by Lγ once instead of at observation level 
+    if needgrad 
+        BLAS.trmm!('R', 'L', 'N', 'N', T(2), m.Lγ, m.∇Lγ)
+    end
     obj
 end
 
@@ -400,6 +451,7 @@ function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
     update_res!(m)
     q = size(m.Lγ, 1)
     for obs in m.data
+        n = length(obs.expwτ)
         mul!(obs.expwτ, transpose(obs.Wt), m.τ)
         # Step 1: assemble Ip + Lt Zt diag(e^{-\eta_j}) Z L
         # storage_qn = L' * Z'
@@ -407,14 +459,15 @@ function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
         BLAS.trmm!('L', 'L', 'T', 'N', T(1), m.Lγ, obs.storage_qn)
         # Dinv = diag(e^{-Wτ})
         obs.rt_Dinv_r[1] = 0.0
-        @inbounds for j in 1:length(obs.expwτ)
-            Dinvjj = exp(-obs.expwτ[j])
-            obs.Dinv[j] = Dinvjj
-            Dinvjj = obs.Dinv[j]
-            obs.Dinv_r[j] = Dinvjj * obs.res[j]
-            obs.rt_Dinv_r[1] += Dinvjj * obs.res[j]^2
-            for i in 1:q
-                obs.storage_qn[i, j] *= Dinvjj
+        vmap!(negexp, obs.Dinv, obs.expwτ)
+        @inbounds for j in 1:n
+            #Dinvjj = exp(-obs.expwτ[j])
+            #obs.Dinv[j] = Dinvjj
+            #Dinvjj = obs.Dinv[j]
+            obs.Dinv_r[j] = obs.Dinv[j] * obs.res[j]
+            obs.rt_Dinv_r[1] += obs.Dinv[j] * obs.res[j]^2
+            @simd for i in 1:q
+                obs.storage_qn[i, j] *= obs.Dinv[j]
             end
         end
         # storage_qq = Lt Zt diag(e^{-wτ}) Z
@@ -448,7 +501,7 @@ function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
 
         fill!(obs.diagUUt_Dinv, 0)
         #storage_qn = Zt * Dinv 
-        @inbounds for j in 1:length(obs.expwτ)
+        @avx for j in 1:n
             for i in 1:m.q 
                 obs.diagUUt_Dinv[j] += obs.Ut[i, j]^2 * obs.Dinv[j]
                 obs.storage_qn[i, j] = obs.Zt[i, j] * obs.Dinv[j]
@@ -527,4 +580,12 @@ Updates avxdiagADB with diag(-A*D*B) where A and B are qxn and d is the diagonal
             diagADB[j] -= A[i, j] * B[i, j] * d[j] #τ 8
         end
     end
+end
+
+@inline function negexp(x)
+    exp(-x)
+end
+
+@inline function sqrtexp(x)
+    exp(0.5x)
 end
