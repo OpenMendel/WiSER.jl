@@ -9,7 +9,7 @@ function fit!(
     solver=Ipopt.IpoptSolver(print_level=5)
     #solver=NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=10000)
     #solver=NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
-    )
+    ; weightedruns = 1)
     q, l = m.q, m.l
     npar = l + ◺(q)
     optm = MathProgBase.NonlinearModel(solver)
@@ -22,11 +22,21 @@ function fit!(
     # end
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # starting point
+    init_ls!(m)
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, m)
     MathProgBase.setwarmstart!(optm, par0)
     # optimize
+    m.weighted[1] = false
     MathProgBase.optimize!(optm)
+    init_wls!(m)
+    m.weighted[1] = true
+    for run in 1:weightedruns 
+        update_wtmat!(m)
+        modelpar_to_optimpar!(par0, m)
+        MathProgBase.setwarmstart!(optm, par0)
+        MathProgBase.optimize!(optm)
+    end
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     # update parameters and refresh gradient
@@ -36,7 +46,7 @@ function fit!(
         lmul!(-1, m.Lγ)
     end
     mom_obj!(m, true, true, true)
-    m
+    get_inference(m)
 end
 
 """
@@ -211,7 +221,8 @@ end
     init_wls!(m::VarLMMModel)
 
 Initialize parameter `β` of a `VarLMMModel` object from weighted least squares 
-estimate and update residuals `resi = yi - Xi * β`. 
+estimate, updates residuals `resi = yi - Xi * β`, and updates model/observation fields 
+`m.XtVinvX` and `m.data[i].XtVinvres` for inference. 
 """
 function init_wls!(m::VarLmmModel{T}) where T <: BlasReal
     p, q, l = m.p, m.q, m.l
@@ -240,13 +251,13 @@ function init_wls!(m::VarLmmModel{T}) where T <: BlasReal
         # storage_qq = Ip + Lt Zt diag(e^{-\eta_j}) Z L
         BLAS.syrk!('U', 'N', T(1), obs.storage_qn, T(0), obs.storage_qq)
         @inbounds for i in 1:q
-            obs.storage_qq[i, i] += 1
+            obs.storage_qq[i, i] += 1.0
         end
         # Step 2: invert (Ip + Lt Zt diag(e^{-\eta_j}) Z L) by cholesky
-        C = cholesky!(Symmetric(obs.storage_qq))
+        LAPACK.potrf!('U', obs.storage_qq)
         # Step 3: assemble X' V^{-1} X
         # storage_qn = U'^{-1} Lt Zt Diagonal(e^{-1/2 \eta_j})
-        BLAS.trsm!('L', 'U', 'T', 'N', T(1), C.U.data, obs.storage_qn)
+        BLAS.trsm!('L', 'U', 'T', 'N', T(1), obs.storage_qq, obs.storage_qn)
         # storage_qp = U'^{-1} Lt Zt Diagonal(e^{-\eta_j}) X
         BLAS.gemm!('N', 'T', T(1), obs.storage_qn, obs.storage_pn, T(0), obs.storage_qp)
         # assemble storage_pp = X' V^{-1} X
@@ -258,10 +269,115 @@ function init_wls!(m::VarLmmModel{T}) where T <: BlasReal
         BLAS.gemv!('T',  T(1), obs.storage_qn, obs.storage_q1, T(0), obs.storage_n1)
         BLAS.gemv!('N', T(-1), obs.storage_pn, obs.storage_n1, T(1), obs.storage_p1)
         # accumulate
+        copytri!(obs.storage_pp, 'U')
         BLAS.axpy!(T(1), obs.storage_pp, xtx)
         BLAS.axpy!(T(1), obs.storage_p1, xty)
     end
+    copyto!(m.XtVinvX, xtx)
     ldiv!(m.β, cholesky!(Symmetric(xtx)), xty)
+    #for inference 
+    for obs in m.data #X' V^{-1} (y - Xβ) = X' V^{-1} y - X' V^{-1} X β
+        BLAS.axpby!(T(1), obs.storage_p1, T(0), obs.XtVinvres)
+        BLAS.gemv!('N', T(-1), obs.storage_pp, m.β, T(1), obs.XtVinvres)
+    end
     update_res!(m)
     m
 end
+
+
+"""
+    update_var!(m::VarLMMModel)
+
+Updates model field `m.V` with asymptotic variance of the parameter estimates.
+"""
+function update_var!(m::VarLmmModel{T}) where T <: BlasReal
+    p, q, l = m.p, m.q, m.l
+    q◺ = ◺(q)
+    mtotal = length(m.data)
+    divm = 1 / mtotal
+    fill!(m.Ainv, 0)
+    fill!(m.B, 0)
+    gradvec = Vector{T}(undef, p + q◺ + l)
+
+    #form A matrix
+    copyto!(m.Ainv, CartesianIndices((1:p, 1:p)), 
+            m.XtVinvX, CartesianIndices((1:p, 1:p)))
+    copyto!(m.Ainv, CartesianIndices(((p + 1):(p + l), 
+        (p + 1):(p + l))), m.Hττ, CartesianIndices((1:l, 1:l)))
+    copyto!(m.Ainv, CartesianIndices(((p + 1):(p + l), 
+        (p + l + 1):(p + l + q◺))), m.HτLγ, CartesianIndices((1:l, 1:q◺)))
+    copyto!(m.Ainv, CartesianIndices(((p + l + 1):(p + l + q◺), 
+        (p + 1):(p + l))), transpose(m.HτLγ), CartesianIndices((1:q◺, 1:l)))
+    copyto!(m.Ainv, CartesianIndices(((p + l + 1):(p + l + q◺), 
+    (p + l + 1):(p + l + q◺))), m.HLγLγ, CartesianIndices((1:q◺, 1:q◺)))
+
+    #form B matrix 
+    for ob in m.data
+        copyto!(gradvec, 1, ob.XtVinvres)
+        copyto!(gradvec, 1 + p, ob.∇τ)
+        offset = p + l + 1
+        @inbounds for j in 1:q, i in j:q
+            gradvec[offset] = ob.∇Lγ[i, j]
+            offset += 1
+        end
+
+        BLAS.syr!('U', T(1), gradvec, m.B)
+    end
+    copytri!(m.B, 'U')
+
+    lmul!(divm, m.Ainv)
+    lmul!(divm, m.B)
+
+    #Calculuate A inverse 
+    LAPACK.potrf!('U', m.Ainv)
+    LAPACK.potri!('U', m.Ainv)
+
+    #Calculate V 
+    copytri!(m.Ainv, 'U')
+    BLAS.symm!('L', 'U', T(1), m.Ainv, m.B, zero(T), m.AinvB)
+    copytri!(m.AinvB, 'U')
+    BLAS.symm!('R', 'U', T(1), m.Ainv, m.AinvB, zero(T), m.V)
+    copytri!(m.V, 'U')
+    
+end
+
+"""
+    get_inference!(m::VarLMMModel)
+
+Returns inference of parameter estimates based on asymptotic normality of M-estimator framework. 
+"""
+function get_inference(m::VarLmmModel{T}) where T <: BlasReal
+    update_var!(m)
+    mtotal = length(m.data)
+    pars = [m.β; m.τ]
+    npars = length([m.β; m.τ])
+    diagV = diag(m.V)[1:npars]
+    if any(diagV .< 0)
+        @warn "Asymptotic Variance is negative, cannot give valid inference"
+        return nothing
+    end
+    stder = sqrt.(diagV ./ mtotal)
+    wald = mtotal .* ([m.β; m.τ].^2 ./ diagV)
+    pvals = Distributions.ccdf.(Chisq(1), wald)
+    
+    StatsModels.CoefTable(hcat(pars, stder, wald, pvals),
+        ["Estimate", "Std. Error", "Wald Statistic", "Pr(>|Wald|)"],
+        [["β$i" for i = 1:m.p]; ["τ$i" for i = 1:m.l]], 4, 3)
+end
+
+# function Base.show(io::IO, m::VarLmmModel)
+#     p, q, l = m.p, m.q, m.l
+#     println(io, "Variance linear mixed model fit by method of moments")
+#     #println(io, " ", m.formula)
+    
+#     #include fit info here?
+
+#     show(io, VarCorr(m))
+#     println("Σγ : Random Effects Covariance Matrix")
+#     show(io, m.Lγ * transpose(m.Lγ))
+
+#     print(io, " Number of individuals/clusters: $(m.m); total observations: $(m.obs)")
+#     println(io, "\n  Fixed-effects parameters:")
+#     # show(io, coeftable(m)) #write a coeftable function to replace below
+#     get_inference(m)
+# end

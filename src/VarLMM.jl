@@ -7,9 +7,11 @@ import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
+@reexport using KNITRO
 
 export VarLmmObs, VarLmmModel
 export DataFrame, fit!, init_ls!, init_wls!, mom_obj!, update_res!, update_wtmat!
+export get_inference
 
 """
     VarLmmObs
@@ -91,6 +93,9 @@ struct VarLmmObs{T <: BlasReal}
     Zt_Vinv_Z               :: Matrix{T}
     Zt_Vinv                 :: Matrix{T}
 
+    XtVinvres               :: Vector{T}
+    obj                     ::Vector{T}
+
 end
 
 function VarLmmObs(
@@ -162,15 +167,16 @@ function VarLmmObs(
     #for Hessian wrt τ
     Wt_D_Dinv               = Matrix{T}(undef, l, n)
     sqrtDinv_UUt            = Vector{T}(undef, n)
-    Ut_kr_Ut                = Matrix{T}(undef, q^2, n)
-    Wt_D_Ut_kr_Utt          = Matrix{T}(undef, l, q^2)
+    Ut_kr_Ut                = Matrix{T}(undef, abs2(q), n)
+    Wt_D_Ut_kr_Utt          = Matrix{T}(undef, l, abs2(q))
     Wt_D_sqrtdiagDinv_UUt   = Matrix{T}(undef, l, n)
 
     #for Hessian wrt Lγ
     Zt_Vinv_Z               = Matrix{T}(undef, q, q)
     Zt_Vinv                 = Matrix{T}(undef, q, n)
 
-
+    XtVinvres               = Vector{T}(undef, p)
+    obj                     = Vector{T}(undef, 1) 
 
     # constructor
     VarLmmObs{T}(
@@ -189,7 +195,8 @@ function VarLmmObs(
         Zt_Dinv, Zt_UUt_rrt_Dinv_Z, Zt_UUt_rrt_UUt_Z, 
         Zt_UUt, Lt_Zt_Dinv_r, Zt_Vinv_r, Wt_D_Dinv, 
         sqrtDinv_UUt, Ut_kr_Ut, Wt_D_Ut_kr_Utt, 
-        Wt_D_sqrtdiagDinv_UUt, Zt_Vinv_Z, Zt_Vinv)
+        Wt_D_sqrtdiagDinv_UUt, Zt_Vinv_Z, Zt_Vinv, XtVinvres,
+        obj)
 end
 
 """
@@ -202,29 +209,39 @@ TODO: function documentation
 """
 struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data :: Vector{VarLmmObs{T}}
-    p    :: Int       # number of mean parameters in linear regression
-    q    :: Int       # number of random effects
-    l    :: Int       # number of parameters for modeling WS variability
+    data    :: Vector{VarLmmObs{T}}
+    p       :: Int       # number of mean parameters in linear regression
+    q       :: Int       # number of random effects
+    l       :: Int       # number of parameters for modeling WS variability
+    m       :: Int       # number of individuals/clusters
+    obs     :: Int       # number of observations (summed across individuals)
     # parameters
-    β    :: Vector{T}  # p-vector of mean regression coefficients
-    τ    :: Vector{T}  # l-vector of WS variability regression coefficients
-    Lγ   :: Matrix{T}  # q by q lower triangular cholesky factor of random effects  var-covar matrix pertaining to γ
+    β       :: Vector{T}  # p-vector of mean regression coefficients
+    τ       :: Vector{T}  # l-vector of WS variability regression coefficients
+    Lγ      :: Matrix{T}  # q by q lower triangular cholesky factor of random effects  var-covar matrix pertaining to γ
     # working arrays
-    ∇β   :: Vector{T}
-    ∇τ   :: Vector{T}
-    ∇Lγ  :: Matrix{T}
-    Hττ  :: Matrix{T}
-    HτLγ :: Matrix{T}
-    HLγLγ:: Matrix{T}
+    ∇β      :: Vector{T}
+    ∇τ      :: Vector{T}
+    ∇Lγ     :: Matrix{T}
+    Hττ     :: Matrix{T}
+    HτLγ    :: Matrix{T}
+    HLγLγ   :: Matrix{T}
     # weighted model or not
-    weighted :: Vector{Bool}
+    weighted:: Vector{Bool}
+    # Add for variance
+    Ainv    :: Matrix{T}
+    B       :: Matrix{T}
+    AinvB   :: Matrix{T}
+    V       :: Matrix{T}
+    XtVinvX :: Matrix{T}
 end
 
 function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
     # dimensions
     p     = size(obsvec[1].Xt, 1)
     q, l  = size(obsvec[1].Zt, 1), size(obsvec[1].Wt, 1)
+    m = length(obsvec)
+    obs = sum(length(obsvec[i].y) for i in 1:m)
     q◺    = ◺(q)
     # parameters
     β     = Vector{T}(undef, p)
@@ -238,15 +255,25 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
     HτLγ  = Matrix{T}(undef, l, q◺)
     HLγLγ = Matrix{T}(undef, q◺, q◺)
     # weighted fitting or not
+
+    # Add for variance   
+    Ainv    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    B       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    AinvB   = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    V       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    XtVinvX = Matrix{T}(undef, p, p)
+
     # constructor
     VarLmmModel{T}(
-        obsvec, p, q, l,
+        obsvec, p, q, l, m, obs,
         β,  τ,  Lγ,
         ∇β, ∇τ, ∇Lγ,
-        Hττ, HτLγ, HLγLγ, [false])
+        Hττ, HτLγ, HLγLγ, [false],
+        Ainv, B, AinvB, V, XtVinvX)
 end
 
 include("mom.jl")
+# include("mom_avx.jl")
 include("mom_nlp.jl")
 # include("mom_nlp_unconstr.jl")
 include("df.jl")
