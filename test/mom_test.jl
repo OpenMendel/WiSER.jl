@@ -50,7 +50,7 @@ for i in 1:m
     obsvec[i] = VarLmmObs(y, X, Z, W)
 end
 # form VarLmmModel
-vlmm = VarLmmModel(obsvec)
+vlmm = VarLmmModel(obsvec);
 
 # @testset "mom_obj!" begin
 # # set parameter values to be the truth

@@ -334,8 +334,7 @@ function update_var!(m::VarLmmModel{T}) where T <: BlasReal
 
     #Calculate V 
     copytri!(m.Ainv, 'U')
-    BLAS.symm!('L', 'U', T(1), m.Ainv, m.B, zero(T), m.AinvB)
-    copytri!(m.AinvB, 'U')
+    mul!(m.AinvB, m.Ainv, m.B)
     BLAS.symm!('R', 'U', T(1), m.Ainv, m.AinvB, zero(T), m.V)
     copytri!(m.V, 'U')
     
