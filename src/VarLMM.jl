@@ -2,16 +2,17 @@ module VarLMM
 
 using DataFrames, Distributions, LinearAlgebra, MathProgBase
 using Permutations, Reexport, Statistics, StatsModels
-using LoopVectorization
+using LoopVectorization, JuliaDB
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
 @reexport using KNITRO
+@reexport using StatsModels
 
 export VarLmmObs, VarLmmModel
 export DataFrame, fit!, init_ls!, init_wls!, mom_obj!, update_res!, update_wtmat!
-export get_inference
+export get_inference, fitweightedonly!
 
 """
     VarLmmObs
@@ -275,6 +276,7 @@ end
 include("mom.jl")
 # include("mom_avx.jl")
 include("mom_nlp.jl")
+# include("nlp_unconstr.jl")
 # include("mom_nlp_unconstr.jl")
 include("df.jl")
 include("multivariate_calculus.jl")

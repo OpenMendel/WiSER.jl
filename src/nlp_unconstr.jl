@@ -44,10 +44,7 @@ function fit!(
     # update parameters and refresh gradient
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
     # diagonal entries of cholesky factor should be >= 0
-    if m.Lγ[1, 1] < 0
-        lmul!(-1, m.Lγ)
-    end
-    mom_obj!(m, true, true, false)
+    mom_obj!(m, true, true, true)
     get_inference(m)
 end
 
@@ -66,7 +63,7 @@ function modelpar_to_optimpar!(
     # Lγ
     offset = l + 1
     @inbounds for j in 1:q, i in j:q
-        par[offset] = m.Lγ[i, j]
+        par[offset] = i == j ? m.Lγ[i, j] == 0.0 ? -1e19 : log(m.Lγ[i, j]) : m.Lγ[i, j]
         offset += 1
     end
     par
@@ -88,7 +85,7 @@ function optimpar_to_modelpar!(
     fill!(m.Lγ, 0)
     offset = l + 1
     @inbounds for j in 1:q, i in j:q
-        m.Lγ[i, j] = par[offset]
+        m.Lγ[i, j] = i == j ? exp(par[offset]) : par[offset]
         offset += 1
     end
     m
@@ -128,10 +125,9 @@ function MathProgBase.eval_grad_f(
     # gradient wrt Lγ
     offset = l + 1
     @inbounds for j in 1:q, i in j:q
-        grad[offset] = m.∇Lγ[i, j]
+        grad[offset] = i == j ? (m.∇Lγ[i, j] * m.Lγ[i, j]) : m.∇Lγ[i, j]
         offset += 1
     end
-    obj
 end
 
 MathProgBase.eval_g(m::VarLmmModel, g, par) = nothing
@@ -164,13 +160,28 @@ function MathProgBase.eval_hesslag(m::VarLmmModel, H::Vector{T},
         H[idx] = m.Hττ[i, j]
         idx += 1
     end
+    diaginds = diagIndsvech(m.q)
+    diagindsfull = collect(1:m.q + 1: abs2(m.q))
+    indsdict = Dict(diaginds .=> diagindsfull)
     @inbounds for j in 1:q◺
         for i in 1:l
-            H[idx] = m.HτLγ[i, j]
+            H[idx] = j in diaginds ? m.HτLγ[i, j] * m.Lγ[indsdict[j]] : m.HτLγ[i, j]
             idx += 1
         end
         for i in 1:j
-            H[idx] = m.HLγLγ[i, j]
+            if i in diaginds && j in diaginds
+                if i == j #same component
+                    H[idx] = m.∇Lγ[indsdict[j]] * m.Lγ[indsdict[j]] + m.HLγLγ[i, j] * m.Lγ[indsdict[j]]^2 
+                else #different components
+                    H[idx] = m.HLγLγ[i, j] * m.Lγ[indsdict[j]] * m.Lγ[indsdict[i]]
+                end
+            elseif i in diaginds
+                H[idx] = m.HLγLγ[i, j] * m.Lγ[indsdict[i]]
+            elseif j in diaginds
+                H[idx] = m.HLγLγ[i, j] * m.Lγ[indsdict[j]]
+            else #none in diagonals 
+                H[idx] = m.HLγLγ[i, j]
+            end
             idx += 1
         end
     end
@@ -214,8 +225,12 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     σ2ω /= n
     m.τ[1] = log(σ2ω)
     # LS estimate for Σγ
-    Σγ = reshape(cholesky!(Symmetric(ztz2)) \ ztr2, (q, q))
+   # Σγ = reshape(cholesky!(Symmetric(ztz2)) \ ztr2, (q, q))
+    Σγ = reshape(cholesky!(Symmetric(ztz2), check=false) \ ztr2, (q, q))
     copy!(m.Lγ, cholesky!(Symmetric(Σγ), check = false).L)
+    if m.Lγ[1, 1] < 0
+        lmul!(-1, m.Lγ)
+    end
     m
 end
 
@@ -421,16 +436,25 @@ function fitweightedonly!(
         modelpar_to_optimpar!(par0, m)
         MathProgBase.setwarmstart!(optm, par0)
         MathProgBase.optimize!(optm)
-        optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
     end
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     # update parameters and refresh gradient
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
     # diagonal entries of cholesky factor should be >= 0
-    if m.Lγ[1, 1] < 0
-        lmul!(-1, m.Lγ)
-    end
     mom_obj!(m, true, true, true)
     get_inference(m)
+end
+
+function diagIndsvech(n::Int)
+    inds = [1]
+    for i in 1:(n - 1)
+        ind = inds[i] + (n - i + 1)
+        push!(inds, ind)
+    end
+    inds
+end
+
+function diagIndsfull(n::Int)
+    collect(1:n+1:n^2)
 end

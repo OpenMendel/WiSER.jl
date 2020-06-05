@@ -26,7 +26,7 @@ lγω   = Lγω[q + 1, 1:q]
 lω    = Lγω[q + 1, q + 1]
 # generate data
 γω = Vector{Float64}(undef, q + 1)
-z  = similar(γω) # hold vector of iid std normal
+z  = similar(γω) # hold vector of iid std normal started at 5:14 PM
 for i in 1:m
     # first column intercept, remaining entries iid std normal
     X = Matrix{Float64}(undef, ns[i], p)
@@ -220,9 +220,9 @@ vlmm = VarLmmModel(obsvec);
 @testset "fit! (start from LS fit)" begin
 println(); println(); println()
 for solver in [
-    # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
+    KNITRO.KnitroSolver(outlev=3), # outlev 0-6
     Ipopt.IpoptSolver(print_level = 3, watchdog_shortened_iter_trigger=3),# helped remedy, best number
-    # Ipopt.IpoptSolver(print_level = 3),
+    Ipopt.IpoptSolver(print_level = 3),
     # Ipopt.IpoptSolver(print_level = 3, hessian_approximation = "limited-memory"),
     # Ipopt.IpoptSolver(print_level = 3, obj_scaling_factor = 1 / m) # less accurae, grad at 10^{-1}
     # Ipopt.IpoptSolver(print_level = 3, mu_strategy = "adaptive") # same speek
@@ -257,6 +257,7 @@ for solver in [
     @show vlmm.HτLγ
     @show vlmm.Hττ
     @show mom_obj!(vlmm)
+    @show get_inference(vlmm)
     # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 15
     # under m = 800, ni = 800:1000
     @test mom_obj!(vlmm, true, true, true) ≈ 3.9331213647326386e8
@@ -279,7 +280,7 @@ for solver in [
     6282.077000013629 2718.9689339744064 -285.69785992542654 269958.7492758073 -1252.7672482838827; 
     -44649.22033721553 -23296.71055040266 1790.8346431986724 -1252.7672482838827 277659.3121544409]
     
-    #for m = 6000 ni = 5:11
+    # for m = 6000 ni = 5:11
     # @test mom_obj!(vlmm) ≈ 791226.9922616098
     # @test isapprox(vlmm.∇τ, [1.91491267287347e-12, 7.859349229200063e-7, -8.247953231510508e-8, 6.274469528388948e-7, 9.676954570991825e-9], atol = 1e-6)
     

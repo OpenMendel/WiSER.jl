@@ -17,7 +17,7 @@ function mom_obj!(
               :: Val{false}, # un-weighted fitting    
     needgrad  :: Bool = true,
     needhess  :: Bool = true,
-    updateres :: Bool = true
+    updateres :: Bool = false
     ) where T <: BlasReal
     (q, n) = size(obs.Zt)
     l = size(obs.Wt, 1)
@@ -118,7 +118,7 @@ function mom_obj!(
               :: Val{true}, # weighted fitting
     needgrad  :: Bool = true,
     needhess  :: Bool = true,
-    updateres :: Bool = true,
+    updateres :: Bool = false,
     ) where T <: BlasReal
     (q, n) = size(obs.Zt)
     l = size(obs.Wt, 1)
@@ -340,7 +340,7 @@ function mom_obj!(
     m         :: VarLmmModel{T},
     needgrad  :: Bool = true,
     needhess  :: Bool = true,
-    updateres :: Bool = true
+    updateres :: Bool = false
     ) where T <: BlasReal
     # accumulate obj and gradient
     obj = zero(T)
