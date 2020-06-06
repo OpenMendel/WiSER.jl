@@ -211,6 +211,9 @@ TODO: function documentation
 struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
     data    :: Vector{VarLmmObs{T}}
+    meannames :: Vector{String} # names of mean fixed effect variables
+    renames :: Vector{String} # names of random location effect variables
+    wsvarnames :: Vector{String} # names of ws var fixed effect variables
     p       :: Int       # number of mean parameters in linear regression
     q       :: Int       # number of random effects
     l       :: Int       # number of parameters for modeling WS variability
@@ -237,7 +240,11 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     XtVinvX :: Matrix{T}
 end
 
-function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
+function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
+    meannames = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
+    renames = ["γ$i" for i in 1:size(obsvec[1].Xt, 1)],
+    wsvarnames = ["τ$i" for i in 1:size(obsvec[1].Xt, 1)]
+    ) where T <: BlasReal
     # dimensions
     p     = size(obsvec[1].Xt, 1)
     q, l  = size(obsvec[1].Zt, 1), size(obsvec[1].Wt, 1)
@@ -266,7 +273,8 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}}) where T <: BlasReal
 
     # constructor
     VarLmmModel{T}(
-        obsvec, p, q, l, m, obs,
+        obsvec, meannames, renames, wsvarnames,
+        p, q, l, m, obs,
         β,  τ,  Lγ,
         ∇β, ∇τ, ∇Lγ,
         Hττ, HτLγ, HLγLγ, [false],

@@ -1,17 +1,29 @@
 """
-    fit!(m::VarLmmModel, solver=Ipopt.IpoptSolver(print_level=5))
+    fit!(m::VarLmmModel, solver=Ipopt.IpoptSolver(print_level=5);
+    fittype=:Hybrid, weightedruns=1)
 
 Fit a `VarLMMModel` object by method of moment using nonlinear programming 
 solver.
+
+The `fit!()` function takes the following arguments:
+* `m::VarLmmModel` the model to fit.
+* `solver` by default this is Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3)
+* `fittype` by default this is :Hybrid. Performing the Hybrid fit described below. The other options are :Weighted and :Unweighted.
+* `weightedruns` number of weighted runs, by default this is 1.
+
+
 """
 function fit!(
     m::VarLmmModel,
-    solver=Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3)
-    #solver=NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=10000)
-    #solver=NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
-    ; weightedruns = 1)
-    q, l = m.q, m.l
-    npar = l + ◺(q)
+    solver = Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3);
+    fittype::Symbol = :Hybrid,
+    weightedruns::Int = 1)
+
+    # Ensure fittype is correctly specified
+    fittype in [:Hybrid, :Weighted, :Unweighted] || 
+        throw("fittype $fittype is not valid. Please use one of [:Hybrid, :Weighted, :Unweighted]")
+
+    npar = m.l + ◺(m.q)
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, npar)
     ub = fill( Inf, npar)
@@ -26,18 +38,22 @@ function fit!(
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, m)
     MathProgBase.setwarmstart!(optm, par0)
-    # optimize
-    m.weighted[1] = false
-    MathProgBase.optimize!(optm)
-    optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
-    init_wls!(m)
-    m.weighted[1] = true
-    for run in 1:weightedruns 
-        update_wtmat!(m)
-        modelpar_to_optimpar!(par0, m)
-        MathProgBase.setwarmstart!(optm, par0)
+    # optimize unweighted obj function
+    if fittype in [:Hybrid, :Unweighted]
+        m.weighted[1] = false
         MathProgBase.optimize!(optm)
         optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
+    end
+    init_wls!(m)
+    if fittype in [:Hybrid, :Weighted]
+        m.weighted[1] = true
+        for run in 1:weightedruns 
+            update_wtmat!(m)
+            modelpar_to_optimpar!(par0, m)
+            MathProgBase.setwarmstart!(optm, par0)
+            MathProgBase.optimize!(optm)
+            optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
+        end
     end
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
@@ -332,6 +348,7 @@ function update_var!(m::VarLmmModel{T}) where T <: BlasReal
 
     #Calculuate A inverse 
     LAPACK.potrf!('U', m.Ainv)
+    # put here 
     LAPACK.potri!('U', m.Ainv)
 
     #Calculate V 
@@ -353,6 +370,7 @@ function get_inference(m::VarLmmModel{T}) where T <: BlasReal
     pars = [m.β; m.τ]
     npars = length([m.β; m.τ])
     diagV = diag(m.V)[1:npars]
+    names = [m.meannames; m.wsvarnames]
     if any(diagV .< 0)
         @warn "Asymptotic Variance is negative, cannot give valid inference"
         return nothing
@@ -363,7 +381,7 @@ function get_inference(m::VarLmmModel{T}) where T <: BlasReal
     
     StatsModels.CoefTable(hcat(pars, stder, wald, pvals),
         ["Estimate", "Std. Error", "Wald Statistic", "Pr(>|Wald|)"],
-        [["β$i" for i = 1:m.p]; ["τ$i" for i = 1:m.l]], 4, 3)
+        names, 4, 3)
 end
 
 # function Base.show(io::IO, m::VarLmmModel)
@@ -384,53 +402,3 @@ end
 # end
 
 
-
-"""
-    fitweightedonly!(m::VarLmmModel, solver=Ipopt.IpoptSolver(print_level=5))
-
-Fit a `VarLMMModel` object by method of moment using nonlinear programming 
-solver.
-"""
-function fitweightedonly!(
-    m::VarLmmModel,
-    solver=Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3)
-    #solver=NLopt.NLoptSolver(algorithm=:LD_SLSQP, maxeval=10000)
-    #solver=NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=10000)
-    ;weightedruns = 2)
-    q, l = m.q, m.l
-    npar = l + ◺(q)
-    optm = MathProgBase.NonlinearModel(solver)
-    lb = fill(-Inf, npar)
-    ub = fill( Inf, npar)
-    # offset = l + 1
-    # for j in 1:q, i in j:q
-    #     i == j && (lb[offset] = 0)
-    #     offset += 1
-    # end
-    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
-    # starting point
-    init_ls!(m)
-    par0 = zeros(npar)
-    modelpar_to_optimpar!(par0, m)
-    MathProgBase.setwarmstart!(optm, par0)
-    # optimize
-    init_wls!(m)
-    m.weighted[1] = true
-    for run in 1:weightedruns 
-        update_wtmat!(m)
-        modelpar_to_optimpar!(par0, m)
-        MathProgBase.setwarmstart!(optm, par0)
-        MathProgBase.optimize!(optm)
-        optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
-    end
-    optstat = MathProgBase.status(optm)
-    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-    # update parameters and refresh gradient
-    optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
-    # diagonal entries of cholesky factor should be >= 0
-    if m.Lγ[1, 1] < 0
-        lmul!(-1, m.Lγ)
-    end
-    mom_obj!(m, true, true, true)
-    get_inference(m)
-end

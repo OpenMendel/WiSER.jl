@@ -35,13 +35,14 @@ end
 
 """
     VarLmmModel(meanformula::FormulaTerm, reformula::FormulaTerm, 
-    wsvarformula::FormulaTerm, idvar::Union{String, Symbol}, df)
+    wsvarformula::FormulaTerm, idvar::Union{String, Symbol}, datatable)
 
 Constructor of `VarLmmModel` from a `DataFrame`. `meanformula` represents the formula for
 the mean fixed effects β (variables in X matrix), `reformula` represents the formula for 
 the mean random effects γ (variables in Z matrix), `wsvarformula` represents the formula 
 for the within-subject variance fixed effects τ (variables in W matrix). `idvar` is the
-id variable for groupings. `df` is the dataframe holding all of the data for the model. 
+id variable for groupings. `data` is the data table holding all of the data for the model.
+It can be a dataframe or column-based table. 
 
 Example:
 vlmm3 = VarLmmModel(@formula(y ~ 1 + x2 + x3 + x4 + x5),
@@ -65,18 +66,23 @@ function VarLmmModel(meanformula::FormulaTerm, reformula::FormulaTerm,
     meanformula = apply_schema(meanformula, schema(meanformula, datatable))
     reformula = apply_schema(reformula, schema(reformula, datatable))
     wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable))
+    
+    meanname = coefnames(meanformula)[2]
+    rename = coefnames(reformula)[2]
+    wsvarname = coefnames(wsvarformula)[2]
 
     #now form observations 
     if typeof(datatable) <: IndexedTable
         varlmm = JuliaDB.groupby(varlmmobs, datatable, idvar) |> 
                 x->column(x, :varlmmobs) |> 
-                VarLmmModel
+                x->VarLmmModel(x, meannames = meanname,
+                renames = rename, wsvarnames = wsvarname)
     else
         varlmm = JuliaDB.groupby(varlmmobs, table(datatable), idvar) |> 
                 x->column(x, :varlmmobs) |> 
-                VarLmmModel
+                x->VarLmmModel(x, meannames = meanname,
+                renames = rename, wsvarnames = wsvarname)
     end
-
 
     return varlmm
 end

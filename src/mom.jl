@@ -186,7 +186,7 @@ function mom_obj!(
     end
 
     @inbounds @simd for j in 1:n
-        obs.obj[1] += (-2 * abs2(obs.Dinv_r[j]) + #3
+        obs.obj[1] += (-2 * abs2(obs.Dinv_r[j]) #3
             + 2 * obs.rt_UUt[j] * obs.Dinv_r[j]  #4
             + 2 * obs.Dinv_r[j] * obs.rt_UUt[j] #8
             - 2 * abs2(obs.rt_UUt[j]) # 9 
