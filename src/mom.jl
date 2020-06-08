@@ -355,18 +355,15 @@ function mom_obj!(
         fill!(m.HτLγ , 0)
         fill!(m.HLγLγ, 0)
     end
-    for i in eachindex(m.data)
-        obj += mom_obj!(m.data[i], m.β, m.τ, m.Lγ, Val(m.weighted[1]),
+    Threads.@threads for i in 1:length(m.data)
+        mom_obj!(m.data[i], m.β, m.τ, m.Lγ, Val(m.weighted[1]),
             needgrad, needhess, updateres)
-    # Threads.@threads for i in 1:length(m.data)
-    #     mom_obj!(m.data[i], m.β, m.τ, m.Lγ, Val(m.weighted[1]),
+    end
+    # @inbounds for i in eachindex(m.data)
+    #     obj += mom_obj!(m.data[i], m.β, m.τ, m.Lγ, Val(m.weighted[1]),
     #         needgrad, needhess, updateres)
-    # end
-    # @inbounds Threads.@threads for i in 1:length(m.data)
-    #     Threads.atomic_add!(obj, mom_obj!(m.data[i], m.β, m.τ, m.Lγ, Val(m.weighted[1]),
-    #         needgrad, needhess, updateres))
-    # for i in eachindex(m.data)
-        # obj += m.data[i].obj[1]
+    @inbounds for i in eachindex(m.data)
+        obj += m.data[i].obj[1]
         if needgrad
             BLAS.axpy!(T(1), m.data[i].∇τ   , m.∇τ )
             BLAS.axpy!(T(1), m.data[i].∇Lγ  , m.∇Lγ)

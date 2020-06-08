@@ -10,9 +10,25 @@ import DataFrames: DataFrame
 @reexport using KNITRO
 @reexport using StatsModels
 
-export VarLmmObs, VarLmmModel
-export DataFrame, fit!, init_ls!, init_wls!, mom_obj!, update_res!, update_wtmat!
-export get_inference, fitweightedonly!
+export 
+    #types 
+    VarLmmObs, 
+    VarLmmModel,
+    #functions
+    coef,
+    confint,
+    DataFrame,
+    fit!,
+    get_inference,
+    init_ls!,
+    init_wls!,
+    mom_obj!,
+    nobs,
+    rvarlmm, 
+    rvarlmm!,
+    stderror,
+    update_res!,
+    update_wtmat!
 
 """
     VarLmmObs
@@ -281,10 +297,21 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
         Ainv, B, AinvB, V, XtVinvX)
 end
 
+coef(m::VarLmmModel) = [m.β; m.τ]
+nobs(m::VarLmmModel) = m.m
+stderror(m::VarLmmModel) = sqrt.(diag(m.V)[1:(m.p + m.l)])
+vcov(m::VarLmmModel) = m.V # include variance parts of Lγ? 
+# weights(m::VarLmmModel) = m.wts
+
+confint(m::VarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
+    stderror(m) * quantile(Normal(), (1. - level) / 2.) * [1. -1.]
+confint(m::VarLmmModel) = confint(m, 0.95)
+
+
+
 include("mom.jl")
 # include("mom_avx.jl")
 include("mom_nlp.jl")
-# include("nlp_unconstr.jl")
 # include("mom_nlp_unconstr.jl")
 include("df.jl")
 include("multivariate_calculus.jl")

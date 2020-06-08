@@ -347,9 +347,12 @@ function update_var!(m::VarLmmModel{T}) where T <: BlasReal
     lmul!(divm, m.B)
 
     #Calculuate A inverse 
-    LAPACK.potrf!('U', m.Ainv)
-    # put here 
-    LAPACK.potri!('U', m.Ainv)
+    if isposdef(m.Ainv)
+        LAPACK.potrf!('U', m.Ainv)
+        LAPACK.potri!('U', m.Ainv)
+    else
+        m.Ainv = pinv(m.Ainv)
+    end
 
     #Calculate V 
     copytri!(m.Ainv, 'U')
