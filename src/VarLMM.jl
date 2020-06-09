@@ -7,7 +7,7 @@ import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
-@reexport using KNITRO
+# @reexport using KNITRO
 @reexport using StatsModels
 @reexport using Distributions 
 
