@@ -1,4 +1,4 @@
-# Test for df.jl functions
+# Test for df.jl and varlmm_rand.jl functions
 using Test, VarLMM, JuliaDB, DataFrames, Random, LinearAlgebra
 
 Random.seed!(123)
@@ -25,8 +25,10 @@ Xs = [randn(2, 3) for i in 1:3]
 Ws = [randn(2, 3) for i in 1:3]
 Zs = [randn(2, 2) for i in 1:3]
 
-@testset "VarLmmModel Constructor & Simulating" begin
+@testset "VarLmmModel Constructor" begin
     @test dfa == dfb == df
+end
+@testset "Simulating Response" begin
     @test rvarlmm!(f1, f2, f3, :id, df, β, τ;
         Σγ = Σγ, respname = :response)[1] ≈ 2.1830342035877
     @test rvarlmm!(f1, f2, f3, :id, t, β, τ;
@@ -34,5 +36,28 @@ Zs = [randn(2, 2) for i in 1:3]
     @test rvarlmm(Xs, Zs, Ws, β, τ; Σγ = Σγ)[1][1] ≈ -0.992563667923
     @test :y in names(df)
     @test :y in colnames(t)
-end
 
+    vlma.β .= 0
+    vlma.τ .= 0
+    vlma.Lγ .= [1. 0; 0 1.]
+    ytest = vlma.data[1].y[1]
+    VarLMM.rand!(vlma) 
+    @test vlma.data[1].y[1] != ytest
+    ytest = vlma.data[1].y[1]
+    VarLMM.rand!(vlma; respdist = MvNormal) 
+    @test vlma.data[1].y[1] != ytest
+    ytest = vlma.data[1].y[1]
+    VarLMM.rand!(vlma; respdist = MvTDist, df = 10) 
+    @test vlma.data[1].y[1] != ytest
+    ytest = vlma.data[1].y[1]
+    vlma.β[1] = 30.
+    VarLMM.rand!(vlma; respdist = Gamma) 
+    @test vlma.data[1].y[1] != ytest
+    ytest = vlma.data[1].y[1]
+    VarLMM.rand!(vlma; respdist = InverseGaussian) 
+    @test vlma.data[1].y[1] != ytest
+    ytest = vlma.data[1].y[1]
+    VarLMM.rand!(vlma; respdist = InverseGamma) 
+    @test vlma.data[1].y[1] != ytest
+
+end

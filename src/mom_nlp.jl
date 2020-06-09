@@ -347,11 +347,14 @@ function update_var!(m::VarLmmModel{T}) where T <: BlasReal
     lmul!(divm, m.B)
 
     #Calculuate A inverse 
-    if isposdef(m.Ainv)
-        LAPACK.potrf!('U', m.Ainv)
+    # LAPACK.potrf!('U', m.Ainv)
+    invCheck = cholesky(Symmetric(m.Ainv), check=false)
+
+    if all(diag(invCheck.U) .> 1e-6) #check diags to make sure pd
+        copyto!(m.Ainv, invCheck.U)
         LAPACK.potri!('U', m.Ainv)
     else
-        m.Ainv = pinv(m.Ainv)
+        m.Ainv .= pinv(m.Ainv)
     end
 
     #Calculate V 

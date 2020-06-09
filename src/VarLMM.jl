@@ -9,6 +9,7 @@ import DataFrames: DataFrame
 @reexport using NLopt
 @reexport using KNITRO
 @reexport using StatsModels
+@reexport using Distributions 
 
 export 
     #types 
@@ -24,6 +25,8 @@ export
     init_wls!,
     mom_obj!,
     nobs,
+    rand!,
+    respdists,
     rvarlmm, 
     rvarlmm!,
     stderror,
@@ -258,8 +261,9 @@ end
 
 function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
     meannames = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
-    renames = ["γ$i" for i in 1:size(obsvec[1].Xt, 1)],
-    wsvarnames = ["τ$i" for i in 1:size(obsvec[1].Xt, 1)]
+    renames = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
+    wsvarnames = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
+    #wts = similar(obsvec.data[1].X, 0) ## fill out later 
     ) where T <: BlasReal
     # dimensions
     p     = size(obsvec[1].Xt, 1)
@@ -299,7 +303,7 @@ end
 
 coef(m::VarLmmModel) = [m.β; m.τ]
 nobs(m::VarLmmModel) = m.m
-stderror(m::VarLmmModel) = sqrt.(diag(m.V)[1:(m.p + m.l)])
+stderror(m::VarLmmModel) = sqrt.(diag(m.V)[1:(m.p + m.l)] ./ m.m)
 vcov(m::VarLmmModel) = m.V # include variance parts of Lγ? 
 # weights(m::VarLmmModel) = m.wts
 
@@ -314,6 +318,7 @@ include("mom.jl")
 include("mom_nlp.jl")
 # include("mom_nlp_unconstr.jl")
 include("df.jl")
+include("varlmm_rand.jl")
 include("multivariate_calculus.jl")
 
 end

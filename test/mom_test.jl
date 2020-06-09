@@ -26,7 +26,7 @@ lγω   = Lγω[q + 1, 1:q]
 lω    = Lγω[q + 1, q + 1]
 # generate data
 γω = Vector{Float64}(undef, q + 1)
-z  = similar(γω) # hold vector of iid std normal started at 5:14 PM
+z  = similar(γω) # hold vector of iid std normal
 for i in 1:m
     # first column intercept, remaining entries iid std normal
     X = Matrix{Float64}(undef, ns[i], p)
@@ -235,8 +235,6 @@ for solver in [
     println("----------")
     @show solver
     println("----------")
-    @info "obj at starting point"
-    @show mom_obj!(vlmm)
     @info "fitting"
     @time VarLMM.fit!(vlmm, solver)
     @info "obj at solution"
