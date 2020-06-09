@@ -7,3 +7,4 @@ deps/deps.jl
 docs/build/
 .ipynb_checkpoints/
 .vscode
+Manifest.toml
