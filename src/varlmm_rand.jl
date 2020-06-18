@@ -128,7 +128,7 @@ function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm,
     reformula = apply_schema(reformula, schema(reformula, datatable))
     wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable))
     
-    q = length(coefnames(reformula.rhs))
+    q = length(StatsModels.coefnames(reformula.rhs))
     # Get Cholesky Factor
     isempty(Σγω) ? Σγω = [Σγ zeros(q); zeros(1, q) 0.0] : Σγω
     Lγω = cholesky(Symmetric(Σγω), check = false).L
@@ -144,14 +144,14 @@ function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm,
         y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
             x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), datatable, idvar) |> 
             x -> column(x, 2) |> x -> vcat(x...) 
-        transform(datatable, respname => y)
+        datatable = JuliaDB.transform(datatable, respname => y)
     else
         y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
             x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), table(datatable), idvar) |> 
             x -> column(x, 2) |> x -> vcat(x...)
         datatable[!, respname] = y
     end
-    return y
+    return datatable
 end
 
 function rvarlmm(X, Z, W, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...)

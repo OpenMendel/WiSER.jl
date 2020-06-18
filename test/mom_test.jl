@@ -255,7 +255,6 @@ for solver in [
     @show vlmm.HτLγ
     @show vlmm.Hττ
     @show mom_obj!(vlmm)
-    @show get_inference(vlmm)
     # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 15
     # under m = 800, ni = 800:1000
     # @test mom_obj!(vlmm, true, true, true) ≈ 3.9331213647326386e8
