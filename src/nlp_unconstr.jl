@@ -8,7 +8,7 @@ solver.
 The `fit!()` function takes the following arguments:
 * `m::VarLmmModel` the model to fit.
 * `solver` by default this is Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3)
-* `fittype` by default this is :Hybrid. Performing the Hybrid fit described below. The other options are :Weighted and :Unweighted.
+* `fittype` by default this is :Hybrid. The other options are :Weighted and :Unweighted.
 * `weightedruns` number of weighted runs, by default this is 1.
 
 
@@ -56,7 +56,7 @@ function fit!(
         end
     end
     optstat = MathProgBase.status(optm)
-    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat. It may be worth trying to change `fittype=:Weighted`.")
     # update parameters and refresh gradient
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
     # diagonal entries of cholesky factor should be >= 0
@@ -64,7 +64,9 @@ function fit!(
         lmul!(-1, m.Lγ)
     end
     mom_obj!(m, true, true, false)
-    get_inference(m)
+    update_var!(m)
+    mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
+    m
 end
 
 """
@@ -217,11 +219,16 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     # LS estimate for β
     xtx = zeros(T, p, p)
     xty = zeros(T, p)
-    for i in eachindex(m.data)
+    wtw = zeros(T, l, l)
+    wtypseudo = zeros(T, l)
+    @inbounds for i in eachindex(m.data)
         # Xi'Xi
         BLAS.syrk!('U', 'N', T(1), m.data[i].Xt, T(1), xtx)
         # Xi'yi
         BLAS.gemv!('N', T(1), m.data[i].Xt, m.data[i].y, T(1), xty)
+        #Wi'Wi
+        map!(exp, m.data[i].storage_ln, m.data[i].Wt)
+        BLAS.syrk!('U', 'N', T(1), m.data[i].storage_ln, T(1), wtw)
     end
     ldiv!(m.β, cholesky!(Symmetric(xtx)), xty)
     update_res!(m)
@@ -244,12 +251,23 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     σ2ω /= n
     m.τ[1] = log(σ2ω)
     # LS estimate for Σγ
-   # Σγ = reshape(cholesky!(Symmetric(ztz2)) \ ztr2, (q, q))
-    Σγ = reshape(cholesky!(Symmetric(ztz2), check=false) \ ztr2, (q, q))
+    Σγ = reshape(cholesky!(Symmetric(ztz2)) \ ztr2, (q, q))
     copy!(m.Lγ, cholesky!(Symmetric(Σγ), check = false).L)
-    if m.Lγ[1, 1] < 0
-        lmul!(-1, m.Lγ)
+    @inbounds for i in eachindex(m.data)
+        # storage_n1 = diag(rr')
+        m.data[i].storage_n1 .= m.data[i].res2
+        # storage_qn = Lγ' * Zt
+        mul!(m.data[i].storage_qn, transpose(m.Lγ), m.data[i].Zt)
+        # storage_n1 = diag(rr' - Z * L * L' * Zt)
+        for j in 1:length(m.data[i].y)
+            for k in 1:m.q
+                m.data[i].storage_n1[j] -= abs2(m.data[i].storage_qn[k, j])
+            end
+        end
+        # Wi'ypsuedoi
+        BLAS.gemv!('N', T(1), m.data[i].storage_ln, m.data[i].storage_n1, T(1), wtypseudo)
     end
+    ldiv!(m.τ, cholesky!(Symmetric(wtw)), wtypseudo)
     m
 end
 
@@ -325,6 +343,7 @@ end
     update_var!(m::VarLMMModel)
 
 Updates model field `m.V` with asymptotic variance of the parameter estimates.
+V is based on the sandwich estimator.
 """
 function update_var!(m::VarLmmModel{T}) where T <: BlasReal
     p, q, l = m.p, m.q, m.l
@@ -365,8 +384,15 @@ function update_var!(m::VarLmmModel{T}) where T <: BlasReal
     lmul!(divm, m.B)
 
     #Calculuate A inverse 
-    LAPACK.potrf!('U', m.Ainv)
-    LAPACK.potri!('U', m.Ainv)
+    # LAPACK.potrf!('U', m.Ainv)
+    invCheck = cholesky(Symmetric(m.Ainv), check=false)
+
+    if all(diag(invCheck.U) .> 1e-6) #check diags to make sure pd
+        copyto!(m.Ainv, invCheck.U)
+        LAPACK.potri!('U', m.Ainv)
+    else
+        m.Ainv .= pinv(m.Ainv)
+    end
 
     #Calculate V 
     copytri!(m.Ainv, 'U')
@@ -376,46 +402,6 @@ function update_var!(m::VarLmmModel{T}) where T <: BlasReal
     
 end
 
-"""
-    get_inference!(m::VarLMMModel)
-
-Returns inference of parameter estimates based on asymptotic normality of M-estimator framework. 
-"""
-function get_inference(m::VarLmmModel{T}) where T <: BlasReal
-    update_var!(m)
-    mtotal = length(m.data)
-    pars = [m.β; m.τ]
-    npars = length([m.β; m.τ])
-    diagV = diag(m.V)[1:npars]
-    if any(diagV .< 0)
-        @warn "Asymptotic Variance is negative, cannot give valid inference"
-        return nothing
-    end
-    stder = sqrt.(diagV ./ mtotal)
-    wald = mtotal .* ([m.β; m.τ].^2 ./ diagV)
-    pvals = Distributions.ccdf.(Chisq(1), wald)
-    
-    StatsModels.CoefTable(hcat(pars, stder, wald, pvals),
-        ["Estimate", "Std. Error", "Wald Statistic", "Pr(>|Wald|)"],
-        [["β$i" for i = 1:m.p]; ["τ$i" for i = 1:m.l]], 4, 3)
-end
-
-# function Base.show(io::IO, m::VarLmmModel)
-#     p, q, l = m.p, m.q, m.l
-#     println(io, "Variance linear mixed model fit by method of moments")
-#     #println(io, " ", m.formula)
-    
-#     #include fit info here?
-
-#     show(io, VarCorr(m))
-#     println("Σγ : Random Effects Covariance Matrix")
-#     show(io, m.Lγ * transpose(m.Lγ))
-
-#     print(io, " Number of individuals/clusters: $(m.m); total observations: $(m.obs)")
-#     println(io, "\n  Fixed-effects parameters:")
-#     # show(io, coeftable(m)) #write a coeftable function to replace below
-#     get_inference(m)
-# end
 
 
 

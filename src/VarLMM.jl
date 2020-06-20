@@ -7,7 +7,7 @@ import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
-@reexport using KNITRO
+# @reexport using KNITRO
 @reexport using StatsModels
 @reexport using Distributions 
 
@@ -17,13 +17,15 @@ export
     VarLmmModel,
     #functions
     coef,
+    coefnames,
+    coeftable,
     confint,
     DataFrame,
     fit!,
-    get_inference,
     init_ls!,
     init_wls!,
     mom_obj!,
+    nclusters,
     nobs,
     rand!,
     respdists,
@@ -31,7 +33,8 @@ export
     rvarlmm!,
     stderror,
     update_res!,
-    update_wtmat!
+    update_wtmat!,
+    vcov
 
 """
     VarLmmObs
@@ -233,6 +236,7 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     meannames :: Vector{String} # names of mean fixed effect variables
     renames :: Vector{String} # names of random location effect variables
     wsvarnames :: Vector{String} # names of ws var fixed effect variables
+    wts     :: Vector{T}
     p       :: Int       # number of mean parameters in linear regression
     q       :: Int       # number of random effects
     l       :: Int       # number of parameters for modeling WS variability
@@ -241,7 +245,8 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # parameters
     β       :: Vector{T}  # p-vector of mean regression coefficients
     τ       :: Vector{T}  # l-vector of WS variability regression coefficients
-    Lγ      :: Matrix{T}  # q by q lower triangular cholesky factor of random effects  var-covar matrix pertaining to γ
+    Lγ      :: Matrix{T}  # q by q lower triangular cholesky factor of random effects covmatrix of γ
+    Σγ      :: Matrix{T}  # q by q Covariance matrix of γ
     # working arrays
     ∇β      :: Vector{T}
     ∇τ      :: Vector{T}
@@ -263,7 +268,7 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
     meannames = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
     renames = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
     wsvarnames = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
-    #wts = similar(obsvec.data[1].X, 0) ## fill out later 
+    wts = []
     ) where T <: BlasReal
     # dimensions
     p     = size(obsvec[1].Xt, 1)
@@ -275,6 +280,7 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
     β     = Vector{T}(undef, p)
     τ     = Vector{T}(undef, l)
     Lγ    = Matrix{T}(undef, q, q)
+    Σγ    = Matrix{T}(undef, q, q)
     # gradients
     ∇β    = Vector{T}(undef, p)
     ∇τ    = Vector{T}(undef, l)
@@ -293,16 +299,18 @@ function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
 
     # constructor
     VarLmmModel{T}(
-        obsvec, meannames, renames, wsvarnames,
+        obsvec, meannames, renames, wsvarnames, wts,
         p, q, l, m, obs,
-        β,  τ,  Lγ,
+        β,  τ,  Lγ, Σγ,
         ∇β, ∇τ, ∇Lγ,
         Hττ, HτLγ, HLγLγ, [false],
         Ainv, B, AinvB, V, XtVinvX)
 end
 
+coefnames(m::VarLmmModel) = [m.meannames; m.wsvarnames]
 coef(m::VarLmmModel) = [m.β; m.τ]
-nobs(m::VarLmmModel) = m.m
+nobs(m::VarLmmModel) = m.obs
+nclusters(m::VarLmmModel) = m.m
 stderror(m::VarLmmModel) = sqrt.(diag(m.V)[1:(m.p + m.l)] ./ m.m)
 vcov(m::VarLmmModel) = m.V # include variance parts of Lγ? 
 # weights(m::VarLmmModel) = m.wts
@@ -311,12 +319,35 @@ confint(m::VarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
     stderror(m) * quantile(Normal(), (1. - level) / 2.) * [1. -1.]
 confint(m::VarLmmModel) = confint(m, 0.95)
 
+function coeftable(m::VarLmmModel)
+    mstder = stderror(m)
+    mcoefs = coef(m)
+    wald = mcoefs ./ mstder
+    pvals = 2 * Distributions.ccdf.(Normal(), abs.(wald))
+    StatsModels.CoefTable(hcat(mcoefs, mstder, wald, pvals),
+        ["Estimate", "Std. Error", "Z", "Pr(>|Z|)"],
+        coefnames(m), 4, 3)
+end
 
+function Base.show(io::IO, m::VarLmmModel)
+    #p, q, l = m.p, m.q, m.l
+    println(io, "Variance linear mixed model fit by method of moments")
+    #println(io, " ", m.formula)
+
+    println(io, "Number of individuals/clusters: $(m.m) \nTotal observations: $(m.obs)")
+    println(io, " ")
+    println(io, "Fixed-effects parameters:")
+    show(io, coeftable(m))
+    println(io, " ")
+
+    println(io, "Σγ : Random Effects Covariance Matrix")
+    Base.print_matrix(IOContext(io, :compact => true), [m.renames m.Σγ])
+end
 
 include("mom.jl")
 # include("mom_avx.jl")
-include("mom_nlp.jl")
-# include("mom_nlp_unconstr.jl")
+# include("mom_nlp.jl")
+include("nlp_unconstr.jl")
 include("df.jl")
 include("varlmm_rand.jl")
 include("multivariate_calculus.jl")
