@@ -12,6 +12,10 @@ function DataFrame(m::VarLmmModel)
     X  = Matrix{Float64}(undef, n, p)
     Z  = Matrix{Float64}(undef, n, q)
     W  = Matrix{Float64}(undef, n, l)
+    addweight = !isempty(m.wts)
+    if addweight
+        weights = Vector{Float64}(undef, n)
+    end
     # gather data
     offset = 1
     for i in 1:length(m.data)
@@ -23,6 +27,9 @@ function DataFrame(m::VarLmmModel)
          X[rangei, :] = transpose(vlmmobs.Xt)
          Z[rangei, :] = transpose(vlmmobs.Zt)
          W[rangei, :] = transpose(vlmmobs.Wt)
+         if addweight
+            weights[rangei] .= m.wts[i]
+         end
         offset += ni
     end
     df = hcat(DataFrame(id = id, y = y), 
@@ -30,6 +37,10 @@ function DataFrame(m::VarLmmModel)
         DataFrame(Z, [Symbol("z$i") for i in 1:q]), 
         DataFrame(W, [Symbol("w$i") for i in 1:l]))
     categorical!(df, :id)
+    if addweight
+        df[!, :wts] = weights
+    end
+    df
 end
 
 

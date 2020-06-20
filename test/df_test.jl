@@ -31,12 +31,14 @@ Zs = [randn(2, 2) for i in 1:3]
 end
 @testset "Simulating Response" begin
     @test rvarlmm!(f1, f2, f3, :id, df, β, τ;
-        Σγ = Σγ, respname = :response)[1] ≈ 2.1830342035877
-    @test rvarlmm!(f1, f2, f3, :id, t, β, τ;
-         Σγ = Σγ, respname = :response)[1] ≈ -1.49863327329357
+        Σγ = Σγ, respname = :response)[1, :response] ≈ 2.1830342035877
+    global t
+    t = rvarlmm!(f1, f2, f3, :id, t, β, τ;
+        Σγ = Σγ, respname = :response)
+    @test t[1].response ≈ -1.49863327329357
     @test rvarlmm(Xs, Zs, Ws, β, τ; Σγ = Σγ)[1][1] ≈ -0.992563667923
     @test :response in names(df)
-    # @test :response in colnames(t) #JuliaDB fcts do not mutate 
+    @test :response in colnames(t)
 
     vlma.β .= 0
     vlma.τ .= 0

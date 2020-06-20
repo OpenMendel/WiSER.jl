@@ -8,7 +8,7 @@ solver.
 The `fit!()` function takes the following arguments:
 * `m::VarLmmModel` the model to fit.
 * `solver` by default this is Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3)
-* `fittype` by default this is :Hybrid. Performing the Hybrid fit described below. The other options are :Weighted and :Unweighted.
+* `fittype` by default this is :Hybrid. The other options are :Weighted and :Unweighted.
 * `weightedruns` number of weighted runs, by default this is 1.
 
 
@@ -213,7 +213,8 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
         # Xi'yi
         BLAS.gemv!('N', T(1), m.data[i].Xt, m.data[i].y, T(1), xty)
         #Wi'Wi
-        BLAS.syrk!('U', 'N', T(1), m.data[i].Wt, T(1), wtw)
+        map!(exp, m.data[i].storage_ln, m.data[i].Wt)
+        BLAS.syrk!('U', 'N', T(1), m.data[i].storage_ln, T(1), wtw)
     end
     ldiv!(m.β, cholesky!(Symmetric(xtx)), xty)
     update_res!(m)
@@ -250,7 +251,7 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
             end
         end
         # Wi'ypsuedoi
-        BLAS.gemv!('N', T(1), m.data[i].Wt, m.data[i].storage_n1, T(1), wtypseudo)
+        BLAS.gemv!('N', T(1), m.data[i].storage_ln, m.data[i].storage_n1, T(1), wtypseudo)
     end
     ldiv!(m.τ, cholesky!(Symmetric(wtw)), wtypseudo)
     m
