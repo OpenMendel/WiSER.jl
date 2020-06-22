@@ -251,10 +251,12 @@ for solver in [
     @show vlmm.∇β
     @show vlmm.∇τ
     @show vlmm.∇Lγ
+    @info "Hessian at solution"
     @show vlmm.HLγLγ
     @show vlmm.HτLγ
     @show vlmm.Hττ
-    @show mom_obj!(vlmm)
+    @info "inference at solution"
+    show(vlmm)
     # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 15
     # under m = 800, ni = 800:1000
     # @test mom_obj!(vlmm, true, true, true) ≈ 3.9331213647326386e8

@@ -23,6 +23,7 @@ export
     DataFrame,
     fit!,
     init_ls!,
+    init_mom!,
     init_wls!,
     mom_obj!,
     nclusters,
@@ -49,10 +50,11 @@ struct VarLmmObs{T <: BlasReal}
     Zt                      :: Matrix{T} # Random effect covars
     Wt                      :: Matrix{T} # Covariates that affect WS variability
     # working arrays
-    ∇β                      :: Vector{T} # gradient wrt β
-    ∇τ                      :: Vector{T} # gradient wrt τ
-    ∇Lγ                     :: Matrix{T} # gradient wrt L cholesky factor 
-    Hττ                     :: Matrix{T} # hessian
+    ∇β                      :: Vector{T} # gradient
+    ∇τ                      :: Vector{T}
+    ∇Lγ                     :: Matrix{T}
+    Hββ                     :: Matrix{T} # hessian
+    Hττ                     :: Matrix{T} 
     HτLγ                    :: Matrix{T}
     HLγLγ                   :: Matrix{T}
     res                     :: Vector{T} # residual vector
@@ -115,10 +117,7 @@ struct VarLmmObs{T <: BlasReal}
     #for Hessian wrt Lγ
     Zt_Vinv_Z               :: Matrix{T}
     Zt_Vinv                 :: Matrix{T}
-
-    XtVinvres               :: Vector{T}
-    obj                     ::Vector{T}
-
+    obj                     :: Vector{T}
 end
 
 function VarLmmObs(
@@ -133,14 +132,15 @@ function VarLmmObs(
     ∇β                      = Vector{T}(undef, p)
     ∇τ                      = Vector{T}(undef, l)
     ∇Lγ                     = Matrix{T}(undef, q, q)
+    Hββ                     = Matrix{T}(undef, p, p)
     Hττ                     = Matrix{T}(undef, l, l)
     HτLγ                    = Matrix{T}(undef, l, q◺)
     HLγLγ                   = Matrix{T}(undef, q◺, q◺)
     res                     = Vector{T}(undef, n)
     res2                    = Vector{T}(undef, n)
-    resnrm2                 = Vector{T}(undef, n)
+    resnrm2                 = Vector{T}(undef, 1)
     expwτ                   = Vector{T}(undef, n)
-    ztz                     = Z'Z
+    ztz                     = transpose(Z) * Z
     ztres                   = Vector{T}(undef, q)
     zlltzt_dg               = Vector{T}(undef, n)
     storage_n1              = Vector{T}(undef, n)
@@ -198,14 +198,13 @@ function VarLmmObs(
     Zt_Vinv_Z               = Matrix{T}(undef, q, q)
     Zt_Vinv                 = Matrix{T}(undef, q, n)
 
-    XtVinvres               = Vector{T}(undef, p)
     obj                     = Vector{T}(undef, 1) 
 
     # constructor
     VarLmmObs{T}(
         y, transpose(X), transpose(Z), transpose(W), 
         ∇β, ∇τ, ∇Lγ,
-        Hττ, HτLγ, HLγLγ,
+        Hββ, Hττ, HτLγ, HLγLγ,
         res, res2, resnrm2, expwτ, ztz, ztres, zlltzt_dg,
         storage_n1, storage_p1, storage_q1,
         storage_pn, storage_qn, storage_ln, 
@@ -218,7 +217,7 @@ function VarLmmObs(
         Zt_Dinv, Zt_UUt_rrt_Dinv_Z, Zt_UUt_rrt_UUt_Z, 
         Zt_UUt, Lt_Zt_Dinv_r, Zt_Vinv_r, Wt_D_Dinv, 
         sqrtDinv_UUt, Ut_kr_Ut, Wt_D_Ut_kr_Utt, 
-        Wt_D_sqrtdiagDinv_UUt, Zt_Vinv_Z, Zt_Vinv, XtVinvres,
+        Wt_D_sqrtdiagDinv_UUt, Zt_Vinv_Z, Zt_Vinv,
         obj)
 end
 
@@ -232,88 +231,99 @@ TODO: function documentation
 """
 struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data    :: Vector{VarLmmObs{T}}
-    meannames :: Vector{String} # names of mean fixed effect variables
-    renames :: Vector{String} # names of random location effect variables
+    data       :: Vector{VarLmmObs{T}}
+    meannames  :: Vector{String} # names of mean fixed effect variables
+    renames    :: Vector{String} # names of random location effect variables
     wsvarnames :: Vector{String} # names of ws var fixed effect variables
-    wts     :: Vector{T}
-    p       :: Int       # number of mean parameters in linear regression
-    q       :: Int       # number of random effects
-    l       :: Int       # number of parameters for modeling WS variability
-    m       :: Int       # number of individuals/clusters
-    obs     :: Int       # number of observations (summed across individuals)
+    obswt      :: Vector{T} # individual/cluster weights
+    p          :: Int       # number of mean parameters in linear regression
+    q          :: Int       # number of random effects
+    l          :: Int       # number of parameters for modeling WS variability
+    m          :: Int       # number of individuals/clusters
+    nsum       :: Int       # number of observations (summed across individuals)
     # parameters
-    β       :: Vector{T}  # p-vector of mean regression coefficients
-    τ       :: Vector{T}  # l-vector of WS variability regression coefficients
-    Lγ      :: Matrix{T}  # q by q lower triangular cholesky factor of random effects covmatrix of γ
-    Σγ      :: Matrix{T}  # q by q Covariance matrix of γ
+    β          :: Vector{T}  # p-vector of mean regression coefficients
+    τ          :: Vector{T}  # l-vector of WS variability regression coefficients
+    Lγ         :: Matrix{T}  # q by q lower triangular Cholesky factor of cov(γ)
+    Σγ         :: Matrix{T}  # q by q covariance matrix of γ
     # working arrays
-    ∇β      :: Vector{T}
-    ∇τ      :: Vector{T}
-    ∇Lγ     :: Matrix{T}
-    Hττ     :: Matrix{T}
-    HτLγ    :: Matrix{T}
-    HLγLγ   :: Matrix{T}
-    # weighted model or not
-    weighted:: Vector{Bool}
-    # Add for variance
-    Ainv    :: Matrix{T}
-    B       :: Matrix{T}
-    AinvB   :: Matrix{T}
-    V       :: Matrix{T}
-    XtVinvX :: Matrix{T}
+    ∇β         :: Vector{T}
+    ∇τ         :: Vector{T}
+    ∇Lγ        :: Matrix{T}
+    ∇Σγ        :: Matrix{T}
+    Hββ        :: Matrix{T}
+    Hττ        :: Matrix{T}
+    HτLγ       :: Matrix{T}
+    HLγLγ      :: Matrix{T}
+    HΣγΣγ      :: Matrix{T}
+    # weighted NLS or unweighted NLS
+    iswtnls    :: Vector{Bool}
+    # multi-threading or not
+    ismthrd    :: Vector{Bool}
+    # for sandwich estimator
+    ψ          :: Vector{T}
+    Ainv       :: Matrix{T}
+    B          :: Matrix{T}
+    AinvB      :: Matrix{T}
+    vcov       :: Matrix{T}
 end
 
-function VarLmmModel(obsvec::Vector{VarLmmObs{T}};
-    meannames = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
-    renames = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
-    wsvarnames = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
-    wts = []
+function VarLmmModel(
+    obsvec     :: Vector{VarLmmObs{T}};
+    wts        :: Vector = [],
+    meannames  :: Vector{String} = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
+    renames    :: Vector{String} = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
+    wsvarnames :: Vector{String} = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
     ) where T <: BlasReal
     # dimensions
-    p     = size(obsvec[1].Xt, 1)
-    q, l  = size(obsvec[1].Zt, 1), size(obsvec[1].Wt, 1)
-    m = length(obsvec)
-    obs = sum(length(obsvec[i].y) for i in 1:m)
-    q◺    = ◺(q)
+    p       = size(obsvec[1].Xt, 1)
+    q       = size(obsvec[1].Zt, 1)
+    l       = size(obsvec[1].Wt, 1)
+    m       = length(obsvec)
+    nsum    = sum(o -> length(o.y), obsvec)
+    q◺      = ◺(q)
     # parameters
-    β     = Vector{T}(undef, p)
-    τ     = Vector{T}(undef, l)
-    Lγ    = Matrix{T}(undef, q, q)
-    Σγ    = Matrix{T}(undef, q, q)
+    β       = Vector{T}(undef, p)
+    τ       = Vector{T}(undef, l)
+    Lγ      = Matrix{T}(undef, q, q)
+    Σγ      = Matrix{T}(undef, q, q)
     # gradients
-    ∇β    = Vector{T}(undef, p)
-    ∇τ    = Vector{T}(undef, l)
-    ∇Lγ   = Matrix{T}(undef, q, q)
-    Hττ   = Matrix{T}(undef, l, l)
-    HτLγ  = Matrix{T}(undef, l, q◺)
-    HLγLγ = Matrix{T}(undef, q◺, q◺)
-    # weighted fitting or not
-
-    # Add for variance   
+    ∇β      = Vector{T}(undef, p)
+    ∇τ      = Vector{T}(undef, l)
+    ∇Lγ     = Matrix{T}(undef, q, q)
+    ∇Σγ     = Matrix{T}(undef, q, q)
+    Hββ     = Matrix{T}(undef, p, p)
+    Hττ     = Matrix{T}(undef, l, l)
+    HτLγ    = Matrix{T}(undef, l, q◺)
+    HLγLγ   = Matrix{T}(undef, q◺, q◺)
+    HΣγΣγ   = Matrix{T}(undef, abs2(q), abs2(q))
+    # weighted NLS fitting or not
+    iswtnls = [false]
+    # multi-threading or not
+    ismthrd = [false]
+    # sandwich estimator
+    ψ       = Vector{T}(undef, p + q◺ + l)
     Ainv    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     B       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     AinvB   = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
-    V       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
-    XtVinvX = Matrix{T}(undef, p, p)
-
+    vcov    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     # constructor
     VarLmmModel{T}(
         obsvec, meannames, renames, wsvarnames, wts,
-        p, q, l, m, obs,
+        p, q, l, m, nsum,
         β,  τ,  Lγ, Σγ,
-        ∇β, ∇τ, ∇Lγ,
-        Hττ, HτLγ, HLγLγ, [false],
-        Ainv, B, AinvB, V, XtVinvX)
+        ∇β, ∇τ, ∇Lγ, ∇Σγ,
+        Hββ, Hττ, HτLγ, HLγLγ, HΣγΣγ,
+        iswtnls, ismthrd,
+        ψ, Ainv, B, AinvB, vcov)
 end
 
 coefnames(m::VarLmmModel) = [m.meannames; m.wsvarnames]
 coef(m::VarLmmModel) = [m.β; m.τ]
-nobs(m::VarLmmModel) = m.obs
+nobs(m::VarLmmModel) = m.nsum
 nclusters(m::VarLmmModel) = m.m
-stderror(m::VarLmmModel) = sqrt.(diag(m.V)[1:(m.p + m.l)] ./ m.m)
-vcov(m::VarLmmModel) = m.V # include variance parts of Lγ? 
-# weights(m::VarLmmModel) = m.wts
+stderror(m::VarLmmModel) = sqrt.(diag(m.vcov)[1:(m.p + m.l)] ./ m.m)
+vcov(m::VarLmmModel) = m.vcov # include variance parts of Lγ? 
 
 confint(m::VarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
     stderror(m) * quantile(Normal(), (1. - level) / 2.) * [1. -1.]
@@ -330,26 +340,28 @@ function coeftable(m::VarLmmModel)
 end
 
 function Base.show(io::IO, m::VarLmmModel)
-    #p, q, l = m.p, m.q, m.l
+    println(io)
     println(io, "Variance linear mixed model fit by method of moments")
     #println(io, " ", m.formula)
-
-    println(io, "Number of individuals/clusters: $(m.m) \nTotal observations: $(m.obs)")
-    println(io, " ")
+    println(io, "Number of individuals/clusters: $(m.m)")
+    println(io, "Total observations: $(m.nsum)")
+    println(io)
     println(io, "Fixed-effects parameters:")
     show(io, coeftable(m))
-    println(io, " ")
-
-    println(io, "Σγ : Random Effects Covariance Matrix")
+    println(io)
+    println(io, "Random effects covariance matrix Σγ:")
     Base.print_matrix(IOContext(io, :compact => true), [m.renames m.Σγ])
+    println(io)
 end
 
 include("mom.jl")
 # include("mom_avx.jl")
 # include("mom_nlp.jl")
+include("initialization.jl")
 include("nlp_unconstr.jl")
 include("df.jl")
 include("varlmm_rand.jl")
 include("multivariate_calculus.jl")
+include("sandwich.jl")
 
 end
