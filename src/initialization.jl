@@ -18,7 +18,7 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
         BLAS.gemv!('N', T(1), obs.Xt, obs.y, T(1), m.∇β)
     end
     _, info = LAPACK.potrf!('U', m.Hββ)
-    info > 0 && throw("design matrix X is singular")
+    info > 0 && throw("design matrix X is rank deficient")
     LAPACK.potrs!('U', m.Hββ, copyto!(m.β, m.∇β))
     update_res!(m)
     # accumulate quantities for initilizing Σγ and τ
@@ -36,20 +36,20 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
         # Zi'Zi ⊗ Zi'Zi
         kron_axpy!(obs.ztz, obs.ztz, m.HΣγΣγ)
         # Zi'ri ⊗ Zi'ri
-        kron_axpy!(obs.ztres, obs.ztres, vec(m.∇Σγ))
+        kron_axpy!(obs.ztres, obs.ztres, m.∇Σγ)
     end
     # LS estimate for Σγ
     _, info = LAPACK.potrf!('U', m.HΣγΣγ)
-    info > 0 && throw("design matrix Z is singular")
-    LAPACK.potrs!('U', m.HΣγΣγ, vec(copyto!(m.Σγ, m.∇Σγ)))
-    _, info = LAPACK.potrf!('L', copy!(m.Lγ, m.Σγ))
+    info > 0 && throw("design matrix Z is rank defficient")
+    LAPACK.potrs!('U', m.HΣγΣγ, m.∇Σγ)
+    _, info = LAPACK.potrf!('L', copyto!(m.Lγ, m.∇Σγ))
     @inbounds for j in 2:q, i in 1:j-1 # make upper triangular of Lγ zero
         m.Lγ[i, j] = 0
     end
     # Σγ is singular; set columns L[:, info:end] = 0
     if info > 0
         @warn("starting Lγ is rank deficient")
-        for j in info:q, i in j:q
+        @inbounds for j in info:q, i in j:q
             m.Lγ[i, j] = 0
         end
     end

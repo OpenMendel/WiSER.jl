@@ -250,7 +250,7 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     ∇β         :: Vector{T}
     ∇τ         :: Vector{T}
     ∇Lγ        :: Matrix{T}
-    ∇Σγ        :: Matrix{T}
+    ∇Σγ        :: Vector{T}
     Hββ        :: Matrix{T}
     Hττ        :: Matrix{T}
     HτLγ       :: Matrix{T}
@@ -264,7 +264,6 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     ψ          :: Vector{T}
     Ainv       :: Matrix{T}
     B          :: Matrix{T}
-    AinvB      :: Matrix{T}
     vcov       :: Matrix{T}
 end
 
@@ -291,7 +290,7 @@ function VarLmmModel(
     ∇β      = Vector{T}(undef, p)
     ∇τ      = Vector{T}(undef, l)
     ∇Lγ     = Matrix{T}(undef, q, q)
-    ∇Σγ     = Matrix{T}(undef, q, q)
+    ∇Σγ     = Vector{T}(undef, abs2(q))
     Hββ     = Matrix{T}(undef, p, p)
     Hττ     = Matrix{T}(undef, l, l)
     HτLγ    = Matrix{T}(undef, l, q◺)
@@ -305,7 +304,6 @@ function VarLmmModel(
     ψ       = Vector{T}(undef, p + q◺ + l)
     Ainv    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     B       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
-    AinvB   = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     vcov    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     # constructor
     VarLmmModel{T}(
@@ -315,14 +313,14 @@ function VarLmmModel(
         ∇β, ∇τ, ∇Lγ, ∇Σγ,
         Hββ, Hττ, HτLγ, HLγLγ, HΣγΣγ,
         iswtnls, ismthrd,
-        ψ, Ainv, B, AinvB, vcov)
+        ψ, Ainv, B, vcov)
 end
 
 coefnames(m::VarLmmModel) = [m.meannames; m.wsvarnames]
 coef(m::VarLmmModel) = [m.β; m.τ]
 nobs(m::VarLmmModel) = m.nsum
 nclusters(m::VarLmmModel) = m.m
-stderror(m::VarLmmModel) = sqrt.(diag(m.vcov)[1:(m.p + m.l)] ./ m.m)
+stderror(m::VarLmmModel) = [sqrt(m.vcov[i, i] / m.m) for i in 1:(m.p + m.l)]
 vcov(m::VarLmmModel) = m.vcov # include variance parts of Lγ? 
 
 confint(m::VarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
@@ -351,6 +349,7 @@ function Base.show(io::IO, m::VarLmmModel)
     println(io)
     println(io, "Random effects covariance matrix Σγ:")
     Base.print_matrix(IOContext(io, :compact => true), [m.renames m.Σγ])
+    println(io)
     println(io)
 end
 

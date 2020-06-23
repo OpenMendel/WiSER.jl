@@ -10,6 +10,7 @@ function sandwich!(m::VarLmmModel{T}) where T <: BlasReal
     p, q, l = m.p, m.q, m.l
     minv    = inv(m.m)
     # form A matrix in the sandwich formula
+    fill!(m.Ainv, 0)
     m.Ainv[          1:p,                 1:p      ] = m.Hββ
     m.Ainv[    (p + 1):(p + l),     (p + 1):(p + l)] = m.Hττ
     m.Ainv[    (p + 1):(p + l), (p + l + 1):end    ] = m.HτLγ
@@ -41,6 +42,6 @@ function sandwich!(m::VarLmmModel{T}) where T <: BlasReal
     end
     mul!(m.Ainv, Aevec, transpose(Aevec))
     # calculate vcov
-    mul!(m.AinvB, m.Ainv , m.B   )
-    mul!(m.vcov , m.AinvB, m.Ainv)
+    mul!(Aevec , m.Ainv, m.B   ) # use Avec as scratch space
+    mul!(m.vcov,  Aevec, m.Ainv)
 end
