@@ -24,8 +24,10 @@ function fit!(
     m::VarLmmModel,
     solver = Ipopt.IpoptSolver(print_level=5, 
             watchdog_shortened_iter_trigger=3);
-    init = init_ls!(m),
-    runs :: Integer = 2)
+    init     :: VarLmmModel = init_ls!(m),
+    runs     :: Integer = 2,
+    parallel :: Bool = false,
+    verbose  :: Bool = true)
     # set up NLP optimization problem
     npar = m.l + ◺(m.q)
     optm = MathProgBase.NonlinearModel(solver)
@@ -33,17 +35,31 @@ function fit!(
     ub   = fill( Inf, npar)
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     par0 = Vector{Float64}(undef, npar)
-    # optimize weighted obj function
+    # optimize weighted NLS
     m.iswtnls[1] = true
+    m.ismthrd[1] = parallel
     for run in 1:runs
+        βprev, τprev, Lγprev = copy(m.β), copy(m.τ), copy(m.Lγ)
+        # update Vi, then β and residuals with WLS
         update_wtmat!(m)
+        # update τ and Lγ by WNLS
+        tic = time() # start timing
         modelpar_to_optimpar!(par0, m)
         MathProgBase.setwarmstart!(optm, par0)
         MathProgBase.optimize!(optm)
         optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
+        toc = time()
         optstat = MathProgBase.status(optm)
         optstat == :Optimal || 
         @warn("Optimization unsuccesful; got $optstat; run = $run")
+        verbose && @printf(
+            "run = %d, ‖Δβ‖ = %f, ‖Δτ‖ = %f, ‖ΔL‖ = %f, status = %s, time(s) = %f\n", 
+            run, 
+            norm(m.β  - βprev ), 
+            norm(m.τ  - τprev ),
+            norm(m.Lγ - Lγprev),
+            optstat,
+            toc - tic)
     end
     # refresh objective, gradient, and Hessian
     mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
@@ -68,7 +84,7 @@ function modelpar_to_optimpar!(
     # Lγ
     offset = l + 1
     @inbounds for j in 1:q, i in j:q
-        par[offset] = i == j ? m.Lγ[i, j] == 0 ? -1e19 : log(m.Lγ[i, j]) : m.Lγ[i, j]
+        par[offset] = i == j ? log(max(m.Lγ[i, j], floatmin(T))) : m.Lγ[i, j]
         offset += 1
     end
     par

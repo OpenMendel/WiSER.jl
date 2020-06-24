@@ -2,7 +2,7 @@ using BenchmarkTools, Distributions, InteractiveUtils
 using LinearAlgebra, Profile, Random, Test, VarLMM
 
 @info "generate data"
-Random.seed!(123)
+Random.seed!(1234)
 # dimensions
 m  = 6000 # number of individuals
 ns = rand(5:11, m) # numbers of observations per individual
@@ -221,8 +221,8 @@ vlmm = VarLmmModel(obsvec);
 println(); println(); println()
 for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
-    Ipopt.IpoptSolver(print_level = 5, watchdog_shortened_iter_trigger=3),# helped remedy, best number
-    # Ipopt.IpoptSolver(print_level = 3),
+    # Ipopt.IpoptSolver(print_level = 5, watchdog_shortened_iter_trigger=3),# helped remedy, best number
+    Ipopt.IpoptSolver(print_level = 0)
     # Ipopt.IpoptSolver(print_level = 3, hessian_approximation = "limited-memory"),
     # Ipopt.IpoptSolver(print_level = 3, obj_scaling_factor = 1 / m) # less accurae, grad at 10^{-1}
     # Ipopt.IpoptSolver(print_level = 3, mu_strategy = "adaptive") # same speek
@@ -236,7 +236,7 @@ for solver in [
     @show solver
     println("----------")
     @info "fitting"
-    @time VarLMM.fit!(vlmm, solver)
+    @time VarLMM.fit!(vlmm, solver, runs=4)
     @info "obj at solution"
     @show mom_obj!(vlmm, true, true)
     @info "estimates at solution"
@@ -292,8 +292,8 @@ for solver in [
     # Profile.clear()
     # @profile @btime mom_obj!($vlmm, true, true, true)
     # Profile.print(format=:flat)
-    bm = @benchmark mom_obj!($vlmm, true, true, true)
-    display(bm); println()
+    # bm = @benchmark mom_obj!($vlmm, true, true, true)
+    # display(bm); println()
     # Profile.clear()
     # @profile @btime update_wtmat!(vlmm)
     # Profile.print(format=:flat)

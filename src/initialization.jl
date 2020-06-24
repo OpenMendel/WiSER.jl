@@ -9,35 +9,23 @@ Initialize parameters of a `VarLmmModel` object from least squares estimate.
 function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     q = m.q
     # LS estimate for β
-    fill!(m.∇β , 0) # to accumulate Xi'yi
-    fill!(m.Hββ, 0) # to accumulate Xi'Xi
-    for obs in m.data
-        # Xi'Xi
-        BLAS.syrk!('U', 'N', T(1), obs.Xt, T(1), m.Hββ)
-        # Xi'yi
-        BLAS.gemv!('N', T(1), obs.Xt, obs.y, T(1), m.∇β)
-    end
-    _, info = LAPACK.potrf!('U', m.Hββ)
+    _, info = LAPACK.potrf!('U', copyto!(m.Hββ, m.xtx))
     info > 0 && throw("design matrix X is rank deficient")
-    LAPACK.potrs!('U', m.Hββ, copyto!(m.β, m.∇β))
+    LAPACK.potrs!('U', m.Hββ, copyto!(m.β, m.xty))
+    # refresh residuals
     update_res!(m)
     # accumulate quantities for initilizing Σγ and τ
-    fill!(m.∇τ   , 0) # to accumulate Wi' * log(ri.^2)
-    fill!(m.Hττ  , 0) # to accumulate Wi' * Wi
-    fill!(m.∇Σγ  , 0) # to accumulate Zi'ri ⊗ Zi'ri
-    fill!(m.HΣγΣγ, 0) # to accumulate Zi'Zi ⊗ Zi'Zi
+    fill!(m.∇τ , 0) # to accumulate Wi' * log(ri.^2)
+    fill!(m.∇Σγ, 0) # to accumulate Zi'ri ⊗ Zi'ri
     for obs in m.data
         # storage_n1 = log(diag(rr'))
-        obs.storage_n1 .= log.(obs.res2)
+        map!(r2 -> log(max(r2, floatmin(T))), obs.storage_n1, obs.res2)
         # accumulate Wi' * log(ri.^2)
         BLAS.gemv!('N', T(1), obs.Wt, obs.storage_n1, T(1), m.∇τ)
-        # accumulate Wi' * Wi
-        BLAS.syrk!('U', 'N', T(1), obs.Wt, T(1), m.Hττ)
-        # Zi'Zi ⊗ Zi'Zi
-        kron_axpy!(obs.ztz, obs.ztz, m.HΣγΣγ)
-        # Zi'ri ⊗ Zi'ri
+        # accumulate Zi'ri ⊗ Zi'ri
         kron_axpy!(obs.ztres, obs.ztres, m.∇Σγ)
     end
+    copyto!(m.HΣγΣγ, m.ztz2)
     # LS estimate for Σγ
     _, info = LAPACK.potrf!('U', m.HΣγΣγ)
     info > 0 && throw("design matrix Z is rank defficient")
@@ -54,7 +42,7 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
         end
     end
     # regress log(ri .* ri) on Wi to initialize τ
-    _, info = LAPACK.potrf!('U', m.Hττ)
+    _, info = LAPACK.potrf!('U', copyto!(m.Hττ, m.wtw))
     info > 0 && throw("design matrix W is singular")
     LAPACK.potrs!('U', m.Hττ, copyto!(m.τ, m.∇τ))
     m

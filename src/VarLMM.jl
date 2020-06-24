@@ -1,7 +1,7 @@
 module VarLMM
 
 using DataFrames, Distributions, LinearAlgebra, MathProgBase
-using Permutations, Reexport, Statistics, StatsModels
+using Permutations, Printf, Reexport, Statistics, StatsModels
 using LoopVectorization, JuliaDB
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
@@ -24,7 +24,6 @@ export
     fit!,
     init_ls!,
     init_mom!,
-    init_wls!,
     mom_obj!,
     nclusters,
     nobs,
@@ -241,6 +240,11 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     l          :: Int       # number of parameters for modeling WS variability
     m          :: Int       # number of individuals/clusters
     nsum       :: Int       # number of observations (summed across individuals)
+    # sufficient statistics
+    xtx        :: Matrix{T}
+    xty        :: Vector{T}
+    wtw        :: Matrix{T}
+    ztz2       :: Matrix{T}
     # parameters
     β          :: Vector{T}  # p-vector of mean regression coefficients
     τ          :: Vector{T}  # l-vector of WS variability regression coefficients
@@ -269,7 +273,7 @@ end
 
 function VarLmmModel(
     obsvec     :: Vector{VarLmmObs{T}};
-    wts        :: Vector = [],
+    obswts     :: Vector = [],
     meannames  :: Vector{String} = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
     renames    :: Vector{String} = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
     wsvarnames :: Vector{String} = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
@@ -281,6 +285,23 @@ function VarLmmModel(
     m       = length(obsvec)
     nsum    = sum(o -> length(o.y), obsvec)
     q◺      = ◺(q)
+    # sufficient statistics
+    xtx     = zeros(T, p, p)
+    xty     = zeros(T, p)
+    wtw     = zeros(T, l, l)
+    ztz2    = zeros(T, abs2(q), abs2(q))
+    for obs in obsvec
+        # accumulate Xi'Xi
+        BLAS.syrk!('U', 'N', T(1), obs.Xt, T(1), xtx)
+        # accumulate Xi'yi
+        BLAS.gemv!('N', T(1), obs.Xt, obs.y, T(1), xty)
+        # accumulate Wi' * Wi
+        BLAS.syrk!('U', 'N', T(1), obs.Wt, T(1), wtw)
+        # accumulate Zi'Zi ⊗ Zi'Zi
+        kron_axpy!(obs.ztz, obs.ztz, ztz2)
+    end
+    copytri!(xtx, 'U')
+    copytri!(wtw, 'U')
     # parameters
     β       = Vector{T}(undef, p)
     τ       = Vector{T}(undef, l)
@@ -307,8 +328,9 @@ function VarLmmModel(
     vcov    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     # constructor
     VarLmmModel{T}(
-        obsvec, meannames, renames, wsvarnames, wts,
+        obsvec, meannames, renames, wsvarnames, obswts,
         p, q, l, m, nsum,
+        xtx, xty, wtw, ztz2,
         β,  τ,  Lγ, Σγ,
         ∇β, ∇τ, ∇Lγ, ∇Σγ,
         Hββ, Hττ, HτLγ, HLγLγ, HΣγΣγ,
