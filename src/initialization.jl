@@ -1,13 +1,16 @@
 """
-    init_ls!(m::VarLmmModel)
+    init_ls!(m::VarLmmModel; gniters::Integer = 1)
 
 Initialize parameters of a `VarLmmModel` object from least squares estimate. 
 `m.β`  is initialized to be `inv(sum(xi'xi)) * sum(xi'yi)`. 
 `m.τ`  is initialized to be `inv(sum(wi'wi)) * sum(wi'log(abs2(ri)))`.  
-`m.Σγ` is initialized to be `inv(sum(zi'zi⊗zi'zi)) * sum(zi'ri⊗zi'ri)`. 
+`m.Σγ` is initialized to be `inv(sum(zi'zi⊗zi'zi)) * sum(zi'ri⊗zi'ri)`.  
+If `gniters > 0`, the run `gniters` Gauss-Newton iterations to improve τ.
 """
-function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
-    q = m.q
+function init_ls!(
+    m       :: VarLmmModel{T};
+    gniters :: Integer = 2) where T <: BlasReal
+    q, l = m.q, m.l
     # LS estimate for β
     _, info = LAPACK.potrf!('U', copyto!(m.Hββ, m.xtx))
     info > 0 && throw("design matrix X is rank deficient")
@@ -45,6 +48,47 @@ function init_ls!(m::VarLmmModel{T}) where T <: BlasReal
     _, info = LAPACK.potrf!('U', copyto!(m.Hττ, m.wtw))
     info > 0 && throw("design matrix W is singular")
     LAPACK.potrs!('U', m.Hττ, copyto!(m.τ, m.∇τ))
+    gniters == 0 && (return m)
+    # Gauss-Newton iterations to improve τ
+    # NLS response: obs.storage_n1 = res^2 - diag(Z L Lt Zt)
+    for obs in m.data
+        n = length(obs.y)
+        # storage_qn = Lγ' * Zt
+        mul!(obs.storage_qn, transpose(m.Lγ), obs.Zt)
+        # storage_n1 = diag(rr' - Z * L * L' * Zt)
+        @inbounds for j in 1:n
+            obs.storage_n1[j] = obs.res2[j]
+            for i in 1:q
+                obs.storage_n1[j] -= abs2(obs.storage_qn[i, j])
+            end
+        end
+    end
+    # Gauss-Newton iterations
+    for iter in 1:gniters
+        # accumulate ∇ and FIM 
+        fill!(m.∇τ, 0)
+        fill!(m.Hττ, 0)
+        for obs in m.data
+            n = length(obs.y)
+            mul!(obs.expwτ, transpose(obs.Wt), m.τ)
+            obs.expwτ .= exp.(obs.expwτ)
+            # storage_ln = Wt * diag(expwτ)
+            copyto!(obs.storage_ln, obs.Wt)
+            @inbounds for j in 1:n, i in 1:l
+                obs.storage_ln[i, j] *= obs.expwτ[j]
+            end
+            # ∇i = Wt * diag(expwτ) * (ypseudo - expwτ)
+            # expwτ = ypseudo - expwτ
+            obs.expwτ .= obs.storage_n1 .- obs.expwτ
+            BLAS.gemv!('N', T(1), obs.storage_ln, obs.expwτ, T(1), m.∇τ)
+            # Hi = Wt * diag(expwτ) * diag(expwτ) * W
+            BLAS.syrk!('U', 'N', T(1), obs.storage_ln, T(1), m.Hττ)
+        end
+        # Gauss-Newton update
+        LAPACK.potrf!('U', m.Hττ)
+        LAPACK.potrs!('U', m.Hττ, m.∇τ) # newton direction
+        m.τ .+= m.∇τ
+    end
     m
 end
 
