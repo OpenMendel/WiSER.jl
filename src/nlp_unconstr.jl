@@ -1,12 +1,12 @@
 """
     fit!(m::VarLmmModel, solver=Ipopt.IpoptSolver(print_level=5);
-    init = init_ls!(m), runs = 1)
+    init = init_ls!(m), runs = 2)
 
 Fit a `VarLMMModel` object using a weighted NLS method.
 
 # Positional arguments
 - `m::VarLmmModel`: Model to fit.
-- `solver`: Default is `Ipopt.IpoptSolver(print_level=5, 
+- `solver`: Default is `Ipopt.IpoptSolver(print_level=0, 
     watchdog_shortened_iter_trigger=3)`.
 
 # Keyword arguments
@@ -22,8 +22,8 @@ Fit a `VarLMMModel` object using a weighted NLS method.
 """
 function fit!(
     m::VarLmmModel,
-    solver = Ipopt.IpoptSolver(print_level=5, 
-            watchdog_shortened_iter_trigger=3);
+    solver = Ipopt.IpoptSolver(print_level=0, 
+        mehrotra_algorithm = "yes", max_iter=100);
     init     :: VarLmmModel = init_ls!(m),
     runs     :: Integer = 2,
     parallel :: Bool = false,
@@ -40,10 +40,10 @@ function fit!(
     m.ismthrd[1] = parallel
     for run in 1:runs
         βprev, τprev, Lγprev = copy(m.β), copy(m.τ), copy(m.Lγ)
+        tic = time() # start timing
         # update Vi, then β and residuals with WLS
         update_wtmat!(m)
-        # update τ and Lγ by WNLS
-        tic = time() # start timing
+        # update τ and Lγ by WNLS        
         modelpar_to_optimpar!(par0, m)
         MathProgBase.setwarmstart!(optm, par0)
         MathProgBase.optimize!(optm)

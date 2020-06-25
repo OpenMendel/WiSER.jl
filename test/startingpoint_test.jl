@@ -65,16 +65,22 @@ function createvlmm(t, k, j)
 end
 
 # vlmm1 = createvlmm(1, 1, 203) # trouble case
-vlmm1 = createvlmm(2, 1, 35)
+vlmm1 = createvlmm(2, 1, 233)
 
-solver = Ipopt.IpoptSolver(print_level=0)
+### If you revert back to initialize intercept only these cases will also fail:
+# ts = [2,   2,   2,   4,   1,   3,   2, 1,   1,   2]
+# ks = [1,   1,   1,   1,   2,   1,   2, 1,   1,   1]
+# js = [35, 53, 109, 148, 168, 174, 100, 7, 203, 233]
+
+# solver = Ipopt.IpoptSolver(print_level=0)
+solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100)
 # solver = NLopt.NLoptSolver(algorithm = :LN_BOBYQA, 
 #     ftol_rel = 1e-12, ftol_abs = 1e-8, maxeval = 10000)
 # solver = NLopt.NLoptSolver(algorithm = :LD_SLSQP, maxeval = 4000)
 # solver = NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000)
 # solver = NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000)
 
-@info "starting point by LS init_ls()"
+@info "starting point by LS init_ls!"
 VarLMM.init_ls!(vlmm1)
 println("β"); display(vlmm1.β); println()
 println("τ"); display(vlmm1.τ); println()
@@ -84,7 +90,7 @@ println("Lγ"); display(vlmm1.Lγ); println()
 @show norm(vlmm1.Lγ - Lγ)
 
 @info "unweighted NLS fit (start from LS)"
-@time init_mom!(vlmm1, solver) #will return error
+@time init_mom!(vlmm1, solver) 
 println("β"); display(vlmm1.β); println()
 println("τ"); display(vlmm1.τ); println()
 println("Lγ"); display(vlmm1.Lγ); println()
@@ -95,8 +101,9 @@ println("Lγ"); display(vlmm1.Lγ); println()
 # @info "weighted NLS fit (start from true τ and LS β, Σγ)"
 # init_ls!(vlmm1)
 # # vlmm1.τ .= [-0.1; 0.5; -0.2; 0.5; 0.0]
-# vlmm1.τ .= [0.27, 0.14, -0.04, 0.13, -0.02] * 5
-# fit!(vlmm1, solver; init = vlmm1, runs = 2) #should work now
+# # vlmm1.τ .= [0.27, 0.14, -0.04, 0.13, -0.02] # LS (x5 works)
+# # vlmm1.τ .= [2.09, 0.13, -0.019, 0.15, -0.0007] # log-LS (x5 works)
+# fit!(vlmm1, solver; init = vlmm1, runs = 2)
 # println("β"); display(vlmm1.β); println()
 # println("τ"); display(vlmm1.τ); println()
 # println("Lγ"); display(vlmm1.Lγ); println()
@@ -119,13 +126,3 @@ println("Lγ"); display(vlmm1.Lγ); println()
 @show norm(vlmm1.β - βtrue)
 @show norm(vlmm1.τ[2:end] - τtrue[2:end])
 @show norm(vlmm1.Lγ - Lγ)
-
-### If you revert back to initialize intercept only these cases will also fail:
-# ts = [2, 2, 2, 4, 1, 3, 2, 1, 1, 2]
-# ks = [1, 1, 1, 1, 2, 1, 2, 1, 1, 1]
-# js = [35, 53, 109, 148, 168, 174, 100, 7, 203, 233]
-
-# for i in 1:length(ts)
-#     vlmmi = createvlmm(1, 1, 203)
-#     fit!(vlmm1, fittype=:Weighted, weightedruns = 2) #should work now
-# end

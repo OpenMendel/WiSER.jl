@@ -241,10 +241,11 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     m          :: Int       # number of individuals/clusters
     nsum       :: Int       # number of observations (summed across individuals)
     # sufficient statistics
-    xtx        :: Matrix{T}
-    xty        :: Vector{T}
-    wtw        :: Matrix{T}
-    ztz2       :: Matrix{T}
+    xtx        :: Matrix{T} # sum_i Xi'Xi
+    xty        :: Vector{T} # sum_i Xi'yi
+    wtw        :: Matrix{T} # sum_i Wi'Wi
+    ztz2       :: Matrix{T} # sum_i Zi'Zi ⊗ Zi'Zi
+    ztz2od     :: Matrix{T} # sum_i (Zi'Zi ⊗ Zi'Zi - (Zi' ⊙ Zi')(Zi' ⊙ Zi')')
     # parameters
     β          :: Vector{T}  # p-vector of mean regression coefficients
     τ          :: Vector{T}  # l-vector of WS variability regression coefficients
@@ -290,6 +291,7 @@ function VarLmmModel(
     xty     = zeros(T, p)
     wtw     = zeros(T, l, l)
     ztz2    = zeros(T, abs2(q), abs2(q))
+    ztz2od  = zeros(T, abs2(q), abs2(q))
     for obs in obsvec
         # accumulate Xi'Xi
         BLAS.syrk!('U', 'N', T(1), obs.Xt, T(1), xtx)
@@ -299,9 +301,16 @@ function VarLmmModel(
         BLAS.syrk!('U', 'N', T(1), obs.Wt, T(1), wtw)
         # accumulate Zi'Zi ⊗ Zi'Zi
         kron_axpy!(obs.ztz, obs.ztz, ztz2)
+        # accumualte (Zi' ⊙ Zi')(Zi' ⊙ Zi')'
+        # Ut_kr_Ut used as scratch space to store Zi' ⊙ Zi'
+        kr_axpy!(obs.Zt, obs.Zt, fill!(obs.Ut_kr_Ut, 0))
+        BLAS.syrk!('U', 'N', T(1), obs.Ut_kr_Ut, T(1), ztz2od)
     end
-    copytri!(xtx, 'U')
-    copytri!(wtw, 'U')
+    ztz2od .= ztz2 .- ztz2od
+    copytri!(   xtx, 'U')
+    copytri!(   wtw, 'U')
+    copytri!(  ztz2, 'U')
+    copytri!(ztz2od, 'U')
     # parameters
     β       = Vector{T}(undef, p)
     τ       = Vector{T}(undef, l)
@@ -330,7 +339,7 @@ function VarLmmModel(
     VarLmmModel{T}(
         obsvec, meannames, renames, wsvarnames, obswts,
         p, q, l, m, nsum,
-        xtx, xty, wtw, ztz2,
+        xtx, xty, wtw, ztz2, ztz2od,
         β,  τ,  Lγ, Σγ,
         ∇β, ∇τ, ∇Lγ, ∇Σγ,
         Hββ, Hττ, HτLγ, HLγLγ, HΣγΣγ,

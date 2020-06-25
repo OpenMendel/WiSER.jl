@@ -2,7 +2,7 @@ using BenchmarkTools, Distributions, InteractiveUtils
 using LinearAlgebra, Profile, Random, Test, VarLMM
 
 @info "generate data"
-Random.seed!(1234)
+Random.seed!(12345)
 # dimensions
 m  = 6000 # number of individuals
 ns = rand(5:11, m) # numbers of observations per individual
@@ -31,21 +31,21 @@ for i in 1:m
     # first column intercept, remaining entries iid std normal
     X = Matrix{Float64}(undef, ns[i], p)
     X[:, 1] .= 1
-    @views Distributions.rand!(Normal(), X[:, 2:p])
+    @views randn!(X[:, 2:p])
     # first column intercept, remaining entries iid std normal
     Z = Matrix{Float64}(undef, ns[i], q)
     Z[:, 1] .= 1
-    @views Distributions.rand!(Normal(), Z[:, 2:q])
+    @views randn!(Z[:, 2:q])
     # first column intercept, remaining entries iid std normal
     W = Matrix{Float64}(undef, ns[i], l)
     W[:, 1] .= 1
-    @views Distributions.rand!(Normal(), W[:, 2:l])
+    @views randn!(W[:, 2:l])
     # generate random effects: γω = Lγω * z
     mul!(γω, Lγω, Distributions.rand!(Normal(), z))
     # generate y
     μy = X * βtrue + Z * γω[1:q]
-    @views vy = exp.(W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end])
-    y = rand(MvNormal(μy, Diagonal(vy)))
+    @views ysd = exp.(0.5 .* (W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end]))
+    y = ysd .* randn(ns[i]) .+ μy
     # form a VarLmmObs instance
     obsvec[i] = VarLmmObs(y, X, Z, W)
 end
@@ -221,12 +221,14 @@ vlmm = VarLmmModel(obsvec);
 println(); println(); println()
 for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
-    # Ipopt.IpoptSolver(print_level = 5, watchdog_shortened_iter_trigger=3),# helped remedy, best number
-    Ipopt.IpoptSolver(print_level = 0)
+    # Ipopt.IpoptSolver(print_level=5, 
+    # watchdog_shortened_iter_trigger=3, 
+    # max_iter=100),# helped remedy, best number
+    # Ipopt.IpoptSolver(print_level = 0)
     # Ipopt.IpoptSolver(print_level = 3, hessian_approximation = "limited-memory"),
     # Ipopt.IpoptSolver(print_level = 3, obj_scaling_factor = 1 / m) # less accurae, grad at 10^{-1}
     # Ipopt.IpoptSolver(print_level = 3, mu_strategy = "adaptive") # same speek
-    # Ipopt.IpoptSolver(print_level = 3, mehrotra_algorithm = "yes") # unstable
+    Ipopt.IpoptSolver(print_level = 0, mehrotra_algorithm = "yes", max_iter = 100) # unstable
     # NLopt.NLoptSolver(algorithm = :LD_SLSQP, maxeval = 4000)
     # NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000),
     # NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000)
@@ -235,8 +237,28 @@ for solver in [
     println("----------")
     @show solver
     println("----------")
+    @info "init_ls!"
+    @time init_ls!(vlmm)
+    println("β")
+    display([βtrue vlmm.β]); println()
+    println("τ")
+    display([τtrue vlmm.τ]); println()
+    println("Lγω")
+    display(vlmm.Lγ); println()
+    display(Lγ); println()
+
+    @info "init_mom!"
+    @time init_mom!(vlmm, solver)
+    println("β")
+    display([βtrue vlmm.β]); println()
+    println("τ")
+    display([τtrue vlmm.τ]); println()
+    println("Lγω")
+    display(vlmm.Lγ); println()
+    display(Lγ); println()
+
     @info "fitting"
-    @time VarLMM.fit!(vlmm, solver, runs=4)
+    @time VarLMM.fit!(vlmm, solver, runs=2)
     @info "obj at solution"
     @show mom_obj!(vlmm, true, true)
     @info "estimates at solution"
@@ -251,11 +273,11 @@ for solver in [
     @show vlmm.∇β
     @show vlmm.∇τ
     @show vlmm.∇Lγ
-    @info "Hessian at solution"
-    @show vlmm.Hββ
-    @show vlmm.HLγLγ
-    @show vlmm.HτLγ
-    @show vlmm.Hττ
+    # @info "Hessian at solution"
+    # @show vlmm.Hββ
+    # @show vlmm.HLγLγ
+    # @show vlmm.HτLγ
+    # @show vlmm.Hττ
     @info "inference at solution"
     show(vlmm)
     # BenchmarkTools.DEFAULT_PARAMETERS.seconds = 15
