@@ -1,10 +1,10 @@
 """
-    init_ls!(m::VarLmmModel; gniters::Integer = 1)
+    init_ls!(m::VarLmmModel; gniters::Integer = 5)
 
 Initialize parameters of a `VarLmmModel` object from least squares estimate. 
 `m.β`  is initialized to be `inv(sum(xi'xi)) * sum(xi'yi)`. 
-`m.τ`  is initialized to be `inv(sum(wi'wi)) * sum(wi'log(abs2(ri)))`.  
 `m.Σγ` is initialized to be `inv(sum(zi'zi⊗zi'zi)) * sum(zi'ri⊗zi'ri)`.  
+`m.τ`  is initialized to be `inv(sum(wi'wi)) * sum(wi'log(abs2(ri)))`.  
 If `gniters > 0`, run `gniters` Gauss-Newton iterations to improve τ.
 """
 function init_ls!(
@@ -110,23 +110,25 @@ end
 
 
 """
-    init_mom!(m::VarLmmModel)
+    init_mom!(m::VarLmmModel, solver; init = init_ls!(m), parallel = false)
 
 Initialize `τ` and `Lγ` of a `VarLmmModel` object by method of moment (MoM) 
 using residulas in `m.obs[i].res`. It involves solving an unweighted NLS problem.
 
 # Position arguments
 - `m::VarLmmModel`: A `VarLmmModel` object.
-- `solver`: Default is `Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3)`.
+- `solver`: Default is IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100).
 
 # Keyword arguments
 - `init`: Initlizer for the NLS problem. Default is `init_ls!(m)`. If `init = m`, 
-then it uses the values provided in `m.τ` and `m.Lγ` as starting point.
+then it uses the values provided in `m.τ` and `m.Lγ` as starting point.  
+- `parallel::Bool`: Multi-threading. Default is `false`.
 """
 function init_mom!(
     m::VarLmmModel{T},
-    solver = Ipopt.IpoptSolver(print_level=5, watchdog_shortened_iter_trigger=3);
-    init = init_ls!(m)
+    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100);
+    init     :: VarLmmModel = init_ls!(m),
+    parallel :: Bool = false
     ) where T <: BlasReal
     # set up NLP optimization problem
     npar = m.l + ◺(m.q)
@@ -135,10 +137,11 @@ function init_mom!(
     ub = fill( Inf, npar)
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
     # optimize unweighted obj function (MoM estimator)
+    m.iswtnls[1] = false
+    m.ismthrd[1] = parallel
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, m)
     MathProgBase.setwarmstart!(optm, par0)
-    m.iswtnls[1] = false
     MathProgBase.optimize!(optm)
     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
     optstat = MathProgBase.status(optm) 

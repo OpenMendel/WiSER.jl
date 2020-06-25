@@ -56,15 +56,14 @@ init_ls!(vlmm)
 @show vlmm.τ
 @show vlmm.Lγ
 # @info "type stability"
-# @code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-# @code_warntype mom_obj!(vlmm, true)
+# @code_warntype init_ls!(vlmm)
 @info "benchmark"
 bm = @benchmark init_ls!($vlmm)
 display(bm); println()
 @test allocs(bm) == 0
 # @info "profile"
 # Profile.clear()
-# @profile @btime mom_obj!($vlmm, true, true)
+# @profile @btime init_ls!(vlmm)
 # Profile.print(format=:flat)
 end
 
@@ -81,17 +80,16 @@ vlmm.Lγ  .= Lγ
 update_wtmat!(vlmm)
 @show vlmm.β
 @show vlmm.∇β
-@show vlmm.Hββ
+# @show vlmm.Hββ
 # @info "type stability"
-# @code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-# @code_warntype mom_obj!(vlmm, true)
+# @code_warntype update_wtmat!(vlmm)
 @info "benchmark"
 bm = @benchmark update_wtmat!($vlmm)
 display(bm); println()
 @test allocs(bm) == 0
 # @info "profile"
 # Profile.clear()
-# @profile @btime mom_obj!($vlmm, true, true)
+# @profile @btime update_wtmat!(vlmm)
 # Profile.print(format=:flat)
 end
 
@@ -164,7 +162,7 @@ display(bm); println()
 # Profile.print(format=:flat)
 end
 
-@testset "mom_obj! (weighted) - multi-threading" begin
+@testset "mom_obj! (weighted) - parallel" begin
 # set parameter values to be the truth
 copy!(vlmm.β, βtrue)
 copy!(vlmm.τ, τtrue)

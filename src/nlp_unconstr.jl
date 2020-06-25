@@ -1,13 +1,18 @@
 """
-    fit!(m::VarLmmModel, solver=Ipopt.IpoptSolver(print_level=5);
+    fit!(m::VarLmmModel, 
+    solver=IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100);
     init = init_ls!(m), runs = 2)
 
 Fit a `VarLMMModel` object using a weighted NLS method.
 
 # Positional arguments
 - `m::VarLmmModel`: Model to fit.
-- `solver`: Default is `Ipopt.IpoptSolver(print_level=0, 
-    watchdog_shortened_iter_trigger=3)`.
+- `solver`: Nonlinear programming solver to use. Choices include:  
+    - `Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)`.
+    - `Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100)`.
+    - `KNITRO.KnitroSolver(outlev=3)`. (Knitro is commercial software)
+    - `NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000)`.  
+    - `NLopt.NLoptSolver(algorithm=:LD_LBFGS, maxeval=4000)`.
 
 # Keyword arguments
 - `init`: Initialization strategy. `fit!` will use `m.τ` and `m.Lγ` to set the 
@@ -21,7 +26,7 @@ Fit a `VarLMMModel` object using a weighted NLS method.
     new weighted NLS.
 """
 function fit!(
-    m::VarLmmModel,
+    m        :: VarLmmModel,
     solver = Ipopt.IpoptSolver(print_level=0, 
         mehrotra_algorithm = "yes", max_iter=100);
     init     :: VarLmmModel = init_ls!(m),

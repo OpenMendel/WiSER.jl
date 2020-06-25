@@ -64,8 +64,8 @@ function createvlmm(t, k, j)
     return vlmm
 end
 
-# vlmm1 = createvlmm(1, 1, 203) # trouble case
-vlmm1 = createvlmm(2, 1, 233)
+vlmm1 = createvlmm(1, 1, 203) # trouble case
+# vlmm1 = createvlmm(2, 1, 233)
 
 ### If you revert back to initialize intercept only these cases will also fail:
 # ts = [2,   2,   2,   4,   1,   3,   2, 1,   1,   2]
