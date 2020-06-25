@@ -5,11 +5,12 @@ Initialize parameters of a `VarLmmModel` object from least squares estimate.
 `m.β`  is initialized to be `inv(sum(xi'xi)) * sum(xi'yi)`. 
 `m.τ`  is initialized to be `inv(sum(wi'wi)) * sum(wi'log(abs2(ri)))`.  
 `m.Σγ` is initialized to be `inv(sum(zi'zi⊗zi'zi)) * sum(zi'ri⊗zi'ri)`.  
-If `gniters > 0`, the run `gniters` Gauss-Newton iterations to improve τ.
+If `gniters > 0`, run `gniters` Gauss-Newton iterations to improve τ.
 """
 function init_ls!(
     m       :: VarLmmModel{T};
-    gniters :: Integer = 2) where T <: BlasReal
+    gniters :: Integer = 5) where T <: BlasReal
+    # dimensions
     q, l = m.q, m.l
     # LS estimate for β
     _, info = LAPACK.potrf!('U', copyto!(m.Hββ, m.xtx))
@@ -20,21 +21,35 @@ function init_ls!(
     # accumulate quantities for initilizing Σγ and τ
     fill!(m.∇τ , 0) # to accumulate Wi' * log(ri.^2)
     fill!(m.∇Σγ, 0) # to accumulate Zi'ri ⊗ Zi'ri
+    fill!(m.Lγ, 0)  # scratch space to accumulate Zi'diag(r) diag(r)Zi
     for obs in m.data
+        n = length(obs.y)
         # storage_n1 = log(diag(rr'))
         map!(r2 -> log(max(r2, floatmin(T))), obs.storage_n1, obs.res2)
         # accumulate Wi' * log(ri.^2)
         BLAS.gemv!('N', T(1), obs.Wt, obs.storage_n1, T(1), m.∇τ)
         # accumulate Zi'ri ⊗ Zi'ri
         kron_axpy!(obs.ztres, obs.ztres, m.∇Σγ)
+        # storage_qn = Zi'diag(r)
+        copyto!(obs.storage_qn, obs.Zt)
+        @inbounds for j in 1:n, i in 1:q
+            obs.storage_qn[i, j] *= obs.res[j]
+        end
+        # accmulate vec(Zi'diag(r) diag(r)Zi)
+        BLAS.syrk!('U', 'N', T(1), obs.storage_qn, T(1), m.Lγ)
     end
-    copyto!(m.HΣγΣγ, m.ztz2)
+    copytri!(m.Lγ, 'U')
     # LS estimate for Σγ
-    _, info = LAPACK.potrf!('U', m.HΣγΣγ)
+    _, info = LAPACK.potrf!('U', copyto!(m.HΣγΣγ, m.ztz2od))
     info > 0 && throw("design matrix Z is rank defficient")
+    # sum_i (Zi'ri ⊗ Zi'ri - vec(Zi'diag(r) diag(r)Zi))
+    @inbounds for i in eachindex(m.∇Σγ) 
+        m.∇Σγ[i] -= m.Lγ[i]
+    end
     LAPACK.potrs!('U', m.HΣγΣγ, m.∇Σγ)
     _, info = LAPACK.potrf!('L', copyto!(m.Lγ, m.∇Σγ))
-    @inbounds for j in 2:q, i in 1:j-1 # make upper triangular of Lγ zero
+    # make upper triangular of Lγ zero
+    @inbounds for j in 2:q, i in 1:j-1 
         m.Lγ[i, j] = 0
     end
     # Σγ is singular; set columns L[:, info:end] = 0
@@ -48,9 +63,10 @@ function init_ls!(
     _, info = LAPACK.potrf!('U', copyto!(m.Hττ, m.wtw))
     info > 0 && throw("design matrix W is singular")
     LAPACK.potrs!('U', m.Hττ, copyto!(m.τ, m.∇τ))
+    # quick return if no GN iterations requested
     gniters == 0 && (return m)
     # Gauss-Newton iterations to improve τ
-    # NLS response: obs.storage_n1 = res^2 - diag(Z L Lt Zt)
+    # NLS responses: obs.storage_n1 = res^2 - diag(Z L Lt Zt)
     for obs in m.data
         n = length(obs.y)
         # storage_qn = Lγ' * Zt
@@ -91,6 +107,7 @@ function init_ls!(
     end
     m
 end
+
 
 """
     init_mom!(m::VarLmmModel)
