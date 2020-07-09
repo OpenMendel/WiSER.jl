@@ -105,6 +105,7 @@ function init_ls!(
         LAPACK.potrs!('U', m.Hττ, m.∇τ) # newton direction
         m.τ .+= m.∇τ
     end
+    mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
     m
 end
 
@@ -147,5 +148,6 @@ function init_mom!(
     optstat = MathProgBase.status(optm) 
     optstat == :Optimal || 
     @warn("Optimization unsuccesful; got $optstat")
+    mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
     m
 end
