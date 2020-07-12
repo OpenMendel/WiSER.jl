@@ -12,7 +12,7 @@ function DataFrame(m::VarLmmModel)
     X  = Matrix{Float64}(undef, n, p)
     Z  = Matrix{Float64}(undef, n, q)
     W  = Matrix{Float64}(undef, n, l)
-    addweight = !isempty(m.wts)
+    addweight = !isempty(m.obswts)
     if addweight
         weights = Vector{Float64}(undef, n)
     end
@@ -28,7 +28,7 @@ function DataFrame(m::VarLmmModel)
          Z[rangei, :] = transpose(vlmmobs.Zt)
          W[rangei, :] = transpose(vlmmobs.Wt)
          if addweight
-            weights[rangei] .= m.wts[i]
+            weights[rangei] .= m.obswts[i]
          end
         offset += ni
     end
@@ -38,7 +38,7 @@ function DataFrame(m::VarLmmModel)
         DataFrame(W, [Symbol("w$i") for i in 1:l]))
     categorical!(df, :id)
     if addweight
-        df[!, :wts] = weights
+        df[!, :obswts] = weights
     end
     df
 end
@@ -103,12 +103,12 @@ function VarLmmModel(meanformula::FormulaTerm, reformula::FormulaTerm,
         varlmm = JuliaDB.groupby(varlmmobs, datatable, idvar) |> 
                 x->column(x, :varlmmobs) |> 
                 x->VarLmmModel(x, meannames = meanname,
-                renames = rename, wsvarnames = wsvarname, wts = wts)
+                renames = rename, wsvarnames = wsvarname, obswts = wts)
     else
         varlmm = JuliaDB.groupby(varlmmobs, table(datatable), idvar) |> 
                 x->column(x, :varlmmobs) |> 
                 x->VarLmmModel(x, meannames = meanname,
-                renames = rename, wsvarnames = wsvarname, wts = wts)
+                renames = rename, wsvarnames = wsvarname, obswts = wts)
     end
 
     return varlmm

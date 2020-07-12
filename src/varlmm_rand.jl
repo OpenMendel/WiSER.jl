@@ -185,9 +185,13 @@ function eval_respdist(μy, vy, respdist; df = [])
         all(θparam .> 0) && all(αparam .> 0) || 
             error("The current parameter/data does not allow for InverseGamma to be used. α, θ params must be > 0.")
         return map((α, θ) -> rand(InverseGamma(α, θ)), αparam, θparam)    
+    elseif respdist == Uniform
+        bparams = μy .+ 0.5sqrt.(12vy)
+        aparams = 2μy .- bparams
+        return map((a, b) -> rand(InverseGamma(a, b)), aparams, bparams) 
     else
         error("Response distribution $respdist is not valid. Run respdists() to see available options.")
     end
 end 
 
-respdists() = return [:MvNormal, :MvTDist, :Gamma, :InverseGaussian, :InverseGamma]
+respdists() = return [:MvNormal, :MvTDist, :Gamma, :InverseGaussian, :InverseGamma, :Uniform]

@@ -234,7 +234,7 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     meannames  :: Vector{String} # names of mean fixed effect variables
     renames    :: Vector{String} # names of random location effect variables
     wsvarnames :: Vector{String} # names of ws var fixed effect variables
-    obswt      :: Vector{T} # individual/cluster weights
+    obswts     :: Vector{T} # individual/cluster weights
     p          :: Int       # number of mean parameters in linear regression
     q          :: Int       # number of random effects
     l          :: Int       # number of parameters for modeling WS variability
