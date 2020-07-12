@@ -1,4 +1,4 @@
-module VarLMM
+module WiSER
 
 using DataFrames, Distributions, LinearAlgebra, MathProgBase
 using Permutations, Printf, Reexport, Statistics, StatsModels
