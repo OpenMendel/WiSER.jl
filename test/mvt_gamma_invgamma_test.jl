@@ -1,5 +1,5 @@
 using Distributions, InteractiveUtils, LinearAlgebra
-using Random, Roots, SpecialFunctions, Test, VarLMM
+using Random, Roots, SpecialFunctions, Test, WiSER
 
 @info "generate data"
 Random.seed!(123)

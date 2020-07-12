@@ -1,5 +1,5 @@
 using BenchmarkTools, InteractiveUtils
-using LinearAlgebra, Profile, Random, Test, VarLMM
+using LinearAlgebra, Profile, Random, Test, WiSER
 
 @info "generate data"
 Random.seed!(123)
