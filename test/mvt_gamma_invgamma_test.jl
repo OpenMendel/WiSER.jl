@@ -1,3 +1,7 @@
+# Test on a student T (conditional distribution of Y), gamma (distribution of γ), 
+# inv-gamma (distribution of ω) simulation data example
+module MvtGammaInvgammaTest
+
 using Distributions, InteractiveUtils, LinearAlgebra
 using Random, Roots, SpecialFunctions, Test, WiSER
 
@@ -5,11 +9,11 @@ using Random, Roots, SpecialFunctions, Test, WiSER
 Random.seed!(123)
 # dimensions
 m  = 1000 # number of individuals
-ns = rand(10:10, m) # numbers of observations per individual
+ns = rand(20:20, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
 q  = 3    # number of random effects, including intercept
 l  = 5    # number of WS variance covariates, including intercept
-obsvec = Vector{VarLmmObs{Float64}}(undef, m)
+obsvec = Vector{WSVarLmmObs{Float64}}(undef, m)
 # true parameter values
 βtrue = [ 0.1; 6.5; -3.5; 1.0; 5  ]
 τtrue = [-1.5; 1.5; -0.5; 0.0; 0.0]
@@ -67,16 +71,16 @@ for i in 1:m
     # note: variance of T(ν) is ν / (ν - 2)
     y = μy + sqrt(((ν - 2) / ν)) .* ysd .* rand(TDist(ν), ns[i])
     # form a VarLmmObs instance
-    obsvec[i] = VarLmmObs(y, X, Z, W)
+    obsvec[i] = WSVarLmmObs(y, X, Z, W)
 end
-# form VarLmmModel
-vlmm = VarLmmModel(obsvec);
+# form WSVarLmmModel
+vlmm = WSVarLmmModel(obsvec);
 
 @testset "fit! (start from LS fit)" begin
 println(); println(); println()
 for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
-    Ipopt.IpoptSolver(print_level = 0, mehrotra_algorithm = "yes", max_iter = 100)    
+    Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)
     # Ipopt.IpoptSolver(print_level=5, 
     # watchdog_shortened_iter_trigger=3, 
     # max_iter=100),# helped remedy, best number
@@ -113,9 +117,9 @@ for solver in [
     display(Lγ); println()
 
     @info "fitting"
-    @time VarLMM.fit!(vlmm, solver, runs=2)
+    @time WiSER.fit!(vlmm, solver, runs=2)
     @info "obj at solution"
-    @show mom_obj!(vlmm, true, true)
+    @show nlsv_obj!(vlmm, true, true)
     @info "estimates at solution"
     println("β")
     display([βtrue vlmm.β]); println()
@@ -137,6 +141,7 @@ for solver in [
 
     @info "inference at solution"
     show(vlmm)
+end
 end
 
 end

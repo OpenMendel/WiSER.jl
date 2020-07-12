@@ -7,15 +7,14 @@ import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
 @reexport using NLopt
-# @reexport using KNITRO
 @reexport using StatsModels
 @reexport using Distributions 
 
 export 
-    #types 
-    VarLmmObs, 
-    VarLmmModel,
-    #functions
+    # types 
+    WSVarLmmObs, 
+    WSVarLmmModel,
+    # functions
     coef,
     coefnames,
     coeftable,
@@ -24,7 +23,7 @@ export
     fit!,
     init_ls!,
     init_mom!,
-    mom_obj!,
+    nlsv_obj!,
     nclusters,
     nobs,
     rand!,
@@ -37,89 +36,83 @@ export
     vcov
 
 """
-    VarLmmObs
-    VarLmmObs(y, X, Z, W)
+    WSVarLmmObs
+    WSVarLmmObs(y, X, Z, W)
 
-A realization of variance linear mixed model data instance.
+A realization of within-subject variance linear mixed model data instance.
 """
-struct VarLmmObs{T <: BlasReal}
+struct WSVarLmmObs{T <: BlasReal}
     # data
-    y                       :: Vector{T} # response 
-    Xt                      :: Matrix{T} # X should include a column of 1's
-    Zt                      :: Matrix{T} # Random effect covars
-    Wt                      :: Matrix{T} # Covariates that affect WS variability
+    y                     :: Vector{T} # response 
+    Xt                    :: Matrix{T} # X should include a column of 1's
+    Zt                    :: Matrix{T} # Random effect covars
+    Wt                    :: Matrix{T} # Covariates that affect WS variability
     # working arrays
-    ∇β                      :: Vector{T} # gradient
-    ∇τ                      :: Vector{T}
-    ∇Lγ                     :: Matrix{T}
-    Hββ                     :: Matrix{T} # hessian
-    Hττ                     :: Matrix{T} 
-    HτLγ                    :: Matrix{T}
-    HLγLγ                   :: Matrix{T}
-    res                     :: Vector{T} # residual vector
-    res2                    :: Vector{T} # residual vector.^2
-    resnrm2                 :: Vector{T} # sum of residual squares
-    expwτ                   :: Vector{T} # hold exp.(W * τ)
-    ztz                     :: Matrix{T} # Z'Z
-    ztres                   :: Vector{T} # Z'res
-    zlltzt_dg               :: Vector{T}
-    storage_n1              :: Vector{T}
-    storage_p1              :: Vector{T}
-    storage_q1              :: Vector{T}
-    storage_pn              :: Matrix{T}
-    storage_qn              :: Matrix{T}
-    storage_ln              :: Matrix{T}
-    storage_pp              :: Matrix{T}    
-    storage_qq              :: Matrix{T}
-    storage_qp              :: Matrix{T}
-    storage_q◺n             :: Matrix{T}
-
-    #Woodbury structure for weight matrix Vinv = Dinv - U * U'
-    Dinv                    :: Vector{T}
-    Ut                      :: Matrix{T}
-
-    #for weighted objective eval
-    rt_Dinv_r               :: Vector{T}
-    rt_UUt_r                :: Vector{T}
-    rt_U                    :: Matrix{T}
-    Dinv_r                  :: Vector{T}
-    rt_UUt                  :: Matrix{T}
-    Zt_Dinv_r               :: Vector{T}
-    rt_UUt_Z                :: Matrix{T}
-    diagUUt_Dinv            :: Vector{T}
-    Dinv_Z_L                :: Matrix{T}
-    UUt_Z_L                 :: Matrix{T}
-    Ut_D_U                  :: Matrix{T}
-    Zt_Dinv_Z               :: Matrix{T}
-    Lt_Zt_Dinv_Z_L          :: Matrix{T}
-    Zt_UUt_Z                :: Matrix{T}
-    Lt_Zt_UUt_Z_L           :: Matrix{T}
-
-    #for gradient wrt τ
-    diagDVRV                :: Vector{T}
-
-    #for gradient wrt Lγ
-    Zt_Dinv                 :: Matrix{T}
-    Zt_UUt_rrt_Dinv_Z       :: Matrix{T}
-    Zt_UUt_rrt_UUt_Z        :: Matrix{T}
-    Zt_UUt                  :: Matrix{T}
-    Lt_Zt_Dinv_r            :: Vector{T}
-    Zt_Vinv_r               :: Vector{T}
-
-    #for Hessian wrt τ
-    Wt_D_Dinv               :: Matrix{T}
-    sqrtDinv_UUt            :: Vector{T}
-    Ut_kr_Ut                :: Matrix{T}
-    Wt_D_Ut_kr_Utt          :: Matrix{T}
-    Wt_D_sqrtdiagDinv_UUt   :: Matrix{T}
-
-    #for Hessian wrt Lγ
-    Zt_Vinv_Z               :: Matrix{T}
-    Zt_Vinv                 :: Matrix{T}
-    obj                     :: Vector{T}
+    obj                   :: Vector{T} # instance objective value
+    ∇β                    :: Vector{T} # gradient
+    ∇τ                    :: Vector{T}
+    ∇Lγ                   :: Matrix{T}
+    Hββ                   :: Matrix{T} # hessian
+    Hττ                   :: Matrix{T} 
+    HτLγ                  :: Matrix{T}
+    HLγLγ                 :: Matrix{T}
+    res                   :: Vector{T} # residual vector
+    res2                  :: Vector{T} # residual vector.^2
+    resnrm2               :: Vector{T} # sum of residual squares
+    expwτ                 :: Vector{T} # hold exp.(W * τ)
+    ztz                   :: Matrix{T} # Z'Z
+    ztres                 :: Vector{T} # Z'res
+    zlltzt_dg             :: Vector{T}
+    storage_n1            :: Vector{T}
+    storage_p1            :: Vector{T}
+    storage_q1            :: Vector{T}
+    storage_pn            :: Matrix{T}
+    storage_qn            :: Matrix{T}
+    storage_ln            :: Matrix{T}
+    storage_pp            :: Matrix{T}    
+    storage_qq            :: Matrix{T}
+    storage_qp            :: Matrix{T}
+    storage_q◺n           :: Matrix{T}
+    # Woodbury structure for weight matrix Vinv = Dinv - U * U'
+    Dinv                  :: Vector{T}
+    Ut                    :: Matrix{T}
+    # for weighted objective eval
+    rt_Dinv_r             :: Vector{T}
+    rt_UUt_r              :: Vector{T}
+    rt_U                  :: Matrix{T}
+    Dinv_r                :: Vector{T}
+    rt_UUt                :: Matrix{T}
+    Zt_Dinv_r             :: Vector{T}
+    rt_UUt_Z              :: Matrix{T}
+    diagUUt_Dinv          :: Vector{T}
+    Dinv_Z_L              :: Matrix{T}
+    UUt_Z_L               :: Matrix{T}
+    Ut_D_U                :: Matrix{T}
+    Zt_Dinv_Z             :: Matrix{T}
+    Lt_Zt_Dinv_Z_L        :: Matrix{T}
+    Zt_UUt_Z              :: Matrix{T}
+    Lt_Zt_UUt_Z_L         :: Matrix{T}
+    # for gradient wrt τ
+    diagDVRV              :: Vector{T}
+    # for gradient wrt Lγ
+    Zt_Dinv               :: Matrix{T}
+    Zt_UUt_rrt_Dinv_Z :: Matrix{T}
+    Zt_UUt_rrt_UUt_Z      :: Matrix{T}
+    Zt_UUt                :: Matrix{T}
+    Lt_Zt_Dinv_r          :: Vector{T}
+    Zt_Vinv_r             :: Vector{T}
+    # for Hessian wrt τ
+    Wt_D_Dinv             :: Matrix{T}
+    sqrtDinv_UUt          :: Vector{T}
+    Ut_kr_Ut              :: Matrix{T}
+    Wt_D_Ut_kr_Utt        :: Matrix{T}
+    Wt_D_sqrtdiagDinv_UUt :: Matrix{T}
+    # for Hessian wrt Lγ
+    Zt_Vinv_Z             :: Matrix{T}
+    Zt_Vinv               :: Matrix{T}
 end
 
-function VarLmmObs(
+function WSVarLmmObs(
     y::AbstractVector{T},
     X::AbstractMatrix{T},
     Z::AbstractMatrix{T},
@@ -128,80 +121,72 @@ function VarLmmObs(
     n, p, q, l  = size(X, 1), size(X, 2), size(Z, 2), size(W, 2)
     q◺ = ◺(q)
     # working arrays
-    ∇β                      = Vector{T}(undef, p)
-    ∇τ                      = Vector{T}(undef, l)
-    ∇Lγ                     = Matrix{T}(undef, q, q)
-    Hββ                     = Matrix{T}(undef, p, p)
-    Hττ                     = Matrix{T}(undef, l, l)
-    HτLγ                    = Matrix{T}(undef, l, q◺)
-    HLγLγ                   = Matrix{T}(undef, q◺, q◺)
-    res                     = Vector{T}(undef, n)
-    res2                    = Vector{T}(undef, n)
-    resnrm2                 = Vector{T}(undef, 1)
-    expwτ                   = Vector{T}(undef, n)
-    ztz                     = transpose(Z) * Z
-    ztres                   = Vector{T}(undef, q)
-    zlltzt_dg               = Vector{T}(undef, n)
-    storage_n1              = Vector{T}(undef, n)
-    storage_p1              = Vector{T}(undef, p)
-    storage_q1              = Vector{T}(undef, q)
-    storage_pn              = Matrix{T}(undef, p, n)
-    storage_qn              = Matrix{T}(undef, q, n)
-    storage_ln              = Matrix{T}(undef, l, n)
-    storage_pp              = Matrix{T}(undef, p, p)
-    storage_qq              = Matrix{T}(undef, q, q)
-    storage_qp              = Matrix{T}(undef, q, p)
-    storage_q◺n             = Matrix{T}(undef, q◺, n)
-
-    #added for weighted estimating equations
-    Dinv                    = Vector{T}(undef, n) #stores diag(exp(-wτ_0))
-    Ut                      = Matrix{T}(undef, q, n)
-
-    #denote, r as residual vector D as diagonal(exp(wτ))
-    #added for weigthed estimating equations
-    rt_Dinv_r               = Vector{T}(undef, 1)
-    rt_UUt_r                = Vector{T}(undef, 1)
-    rt_U                    = Matrix{T}(undef, 1, q) 
-    Dinv_r                  = Vector{T}(undef, n)
-    rt_UUt                  = Matrix{T}(undef, 1, n) 
-    Zt_Dinv_r               = Vector{T}(undef, q)
-    rt_UUt_Z                = Matrix{T}(undef, 1, q) 
-    diagUUt_Dinv            = Vector{T}(undef, n)
-    Dinv_Z_L                = Matrix{T}(undef, n, q)
-    UUt_Z_L                 = Matrix{T}(undef, n, q)
-    Ut_D_U                  = Matrix{T}(undef, q, q)
-    Zt_Dinv_Z               = Matrix{T}(undef, q, q)
-    Lt_Zt_Dinv_Z_L          = Matrix{T}(undef, q, q)
-    Zt_UUt_Z                = Matrix{T}(undef, q, q)
-    Lt_Zt_UUt_Z_L           = Matrix{T}(undef, q, q)
-
-    #for gradient wrt τ
-    diagDVRV                = Vector{T}(undef, n)
-
-    #for gradient wrt Lγ
-    Zt_Dinv                 = Matrix{T}(undef, q, n) 
-    Zt_UUt_rrt_Dinv_Z       = Matrix{T}(undef, q, q)
-    Zt_UUt_rrt_UUt_Z        = Matrix{T}(undef, q, q)  
-    Zt_UUt                  = Matrix{T}(undef, q, n) 
-    Lt_Zt_Dinv_r            = Vector{T}(undef, q)
-    Zt_Vinv_r               = Vector{T}(undef, q)
-
-    #for Hessian wrt τ
-    Wt_D_Dinv               = Matrix{T}(undef, l, n)
-    sqrtDinv_UUt            = Vector{T}(undef, n)
-    Ut_kr_Ut                = Matrix{T}(undef, abs2(q), n)
-    Wt_D_Ut_kr_Utt          = Matrix{T}(undef, l, abs2(q))
-    Wt_D_sqrtdiagDinv_UUt   = Matrix{T}(undef, l, n)
-
-    #for Hessian wrt Lγ
-    Zt_Vinv_Z               = Matrix{T}(undef, q, q)
-    Zt_Vinv                 = Matrix{T}(undef, q, n)
-
-    obj                     = Vector{T}(undef, 1) 
-
+    obj                   = Vector{T}(undef, 1) 
+    ∇β                    = Vector{T}(undef, p)
+    ∇τ                    = Vector{T}(undef, l)
+    ∇Lγ                   = Matrix{T}(undef, q, q)
+    Hββ                   = Matrix{T}(undef, p, p)
+    Hττ                   = Matrix{T}(undef, l, l)
+    HτLγ                  = Matrix{T}(undef, l, q◺)
+    HLγLγ                 = Matrix{T}(undef, q◺, q◺)
+    res                   = Vector{T}(undef, n)
+    res2                  = Vector{T}(undef, n)
+    resnrm2               = Vector{T}(undef, 1)
+    expwτ                 = Vector{T}(undef, n)
+    ztz                   = transpose(Z) * Z
+    ztres                 = Vector{T}(undef, q)
+    zlltzt_dg             = Vector{T}(undef, n)
+    storage_n1            = Vector{T}(undef, n)
+    storage_p1            = Vector{T}(undef, p)
+    storage_q1            = Vector{T}(undef, q)
+    storage_pn            = Matrix{T}(undef, p, n)
+    storage_qn            = Matrix{T}(undef, q, n)
+    storage_ln            = Matrix{T}(undef, l, n)
+    storage_pp            = Matrix{T}(undef, p, p)
+    storage_qq            = Matrix{T}(undef, q, q)
+    storage_qp            = Matrix{T}(undef, q, p)
+    storage_q◺n           = Matrix{T}(undef, q◺, n)
+    # added for weighted estimating equations
+    Dinv                  = Vector{T}(undef, n) #stores diag(exp(-wτ_0))
+    Ut                    = Matrix{T}(undef, q, n)
+    # denote, r as residual vector D as diagonal(exp(wτ))
+    # added for weigthed estimating equations
+    rt_Dinv_r             = Vector{T}(undef, 1)
+    rt_UUt_r              = Vector{T}(undef, 1)
+    rt_U                  = Matrix{T}(undef, 1, q) 
+    Dinv_r                = Vector{T}(undef, n)
+    rt_UUt                = Matrix{T}(undef, 1, n) 
+    Zt_Dinv_r             = Vector{T}(undef, q)
+    rt_UUt_Z              = Matrix{T}(undef, 1, q) 
+    diagUUt_Dinv          = Vector{T}(undef, n)
+    Dinv_Z_L              = Matrix{T}(undef, n, q)
+    UUt_Z_L               = Matrix{T}(undef, n, q)
+    Ut_D_U                = Matrix{T}(undef, q, q)
+    Zt_Dinv_Z             = Matrix{T}(undef, q, q)
+    Lt_Zt_Dinv_Z_L        = Matrix{T}(undef, q, q)
+    Zt_UUt_Z              = Matrix{T}(undef, q, q)
+    Lt_Zt_UUt_Z_L         = Matrix{T}(undef, q, q)
+    # for gradient wrt τ
+    diagDVRV              = Vector{T}(undef, n)
+    # for gradient wrt Lγ
+    Zt_Dinv               = Matrix{T}(undef, q, n) 
+    Zt_UUt_rrt_Dinv_Z     = Matrix{T}(undef, q, q)
+    Zt_UUt_rrt_UUt_Z      = Matrix{T}(undef, q, q)  
+    Zt_UUt                = Matrix{T}(undef, q, n) 
+    Lt_Zt_Dinv_r          = Vector{T}(undef, q)
+    Zt_Vinv_r             = Vector{T}(undef, q)
+    # for Hessian wrt τ
+    Wt_D_Dinv             = Matrix{T}(undef, l, n)
+    sqrtDinv_UUt          = Vector{T}(undef, n)
+    Ut_kr_Ut              = Matrix{T}(undef, abs2(q), n)
+    Wt_D_Ut_kr_Utt        = Matrix{T}(undef, l, abs2(q))
+    Wt_D_sqrtdiagDinv_UUt = Matrix{T}(undef, l, n)
+    # for Hessian wrt Lγ
+    Zt_Vinv_Z             = Matrix{T}(undef, q, q)
+    Zt_Vinv               = Matrix{T}(undef, q, n)
     # constructor
-    VarLmmObs{T}(
-        y, transpose(X), transpose(Z), transpose(W), 
+    WSVarLmmObs{T}(
+        y, transpose(X), transpose(Z), transpose(W), obj,
         ∇β, ∇τ, ∇Lγ,
         Hββ, Hττ, HτLγ, HLγLγ,
         res, res2, resnrm2, expwτ, ztz, ztres, zlltzt_dg,
@@ -216,25 +201,25 @@ function VarLmmObs(
         Zt_Dinv, Zt_UUt_rrt_Dinv_Z, Zt_UUt_rrt_UUt_Z, 
         Zt_UUt, Lt_Zt_Dinv_r, Zt_Vinv_r, Wt_D_Dinv, 
         sqrtDinv_UUt, Ut_kr_Ut, Wt_D_Ut_kr_Utt, 
-        Wt_D_sqrtdiagDinv_UUt, Zt_Vinv_Z, Zt_Vinv,
-        obj)
+        Wt_D_sqrtdiagDinv_UUt, Zt_Vinv_Z, Zt_Vinv)
 end
 
 """
-    VarLmmModel
+    WSVarLmmModel
 
-Variance linear mixed model, which contains a vector of 
-`VarLmmObs` as data, model parameters, and working arrays.
+Within-subject variance linear mixed model, which contains a vector of 
+`WSVarLmmObs` as data, model parameters, and working arrays.
 
 TODO: function documentation
 """
-struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
+struct WSVarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data       :: Vector{VarLmmObs{T}}
+    data       :: Vector{WSVarLmmObs{T}}
     meannames  :: Vector{String} # names of mean fixed effect variables
     renames    :: Vector{String} # names of random location effect variables
     wsvarnames :: Vector{String} # names of ws var fixed effect variables
     obswts     :: Vector{T} # individual/cluster weights
+    # dimenions
     p          :: Int       # number of mean parameters in linear regression
     q          :: Int       # number of random effects
     l          :: Int       # number of parameters for modeling WS variability
@@ -272,8 +257,8 @@ struct VarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     vcov       :: Matrix{T}
 end
 
-function VarLmmModel(
-    obsvec     :: Vector{VarLmmObs{T}};
+function WSVarLmmModel(
+    obsvec     :: Vector{WSVarLmmObs{T}};
     obswts     :: Vector = [],
     meannames  :: Vector{String} = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
     renames    :: Vector{String} = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
@@ -336,7 +321,7 @@ function VarLmmModel(
     B       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     vcov    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     # constructor
-    VarLmmModel{T}(
+    WSVarLmmModel{T}(
         obsvec, meannames, renames, wsvarnames, obswts,
         p, q, l, m, nsum,
         xtx, xty, wtw, ztz2, ztz2od,
@@ -347,18 +332,18 @@ function VarLmmModel(
         ψ, Ainv, B, vcov)
 end
 
-coefnames(m::VarLmmModel) = [m.meannames; m.wsvarnames]
-coef(m::VarLmmModel) = [m.β; m.τ]
-nobs(m::VarLmmModel) = m.nsum
-nclusters(m::VarLmmModel) = m.m
-stderror(m::VarLmmModel) = [sqrt(m.vcov[i, i] / m.m) for i in 1:(m.p + m.l)]
-vcov(m::VarLmmModel) = m.vcov # include variance parts of Lγ? 
+coefnames(m::WSVarLmmModel) = [m.meannames; m.wsvarnames]
+coef(m::WSVarLmmModel) = [m.β; m.τ]
+nobs(m::WSVarLmmModel) = m.nsum
+nclusters(m::WSVarLmmModel) = m.m
+stderror(m::WSVarLmmModel) = [sqrt(m.vcov[i, i] / m.m) for i in 1:(m.p + m.l)]
+vcov(m::WSVarLmmModel) = m.vcov # include variance parts of Lγ? 
 
-confint(m::VarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
+confint(m::WSVarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
     stderror(m) * quantile(Normal(), (1. - level) / 2.) * [1. -1.]
-confint(m::VarLmmModel) = confint(m, 0.95)
+confint(m::WSVarLmmModel) = confint(m, 0.95)
 
-function coeftable(m::VarLmmModel)
+function coeftable(m::WSVarLmmModel)
     mstder = stderror(m)
     mcoefs = coef(m)
     wald = mcoefs ./ mstder
@@ -368,9 +353,9 @@ function coeftable(m::VarLmmModel)
         coefnames(m), 4, 3)
 end
 
-function Base.show(io::IO, m::VarLmmModel)
+function Base.show(io::IO, m::WSVarLmmModel)
     println(io)
-    println(io, "Variance linear mixed model fit by method of moments")
+    println(io, "Within-subject variance estimation by robust regression (WiSER)")
     #println(io, " ", m.formula)
     println(io, "Number of individuals/clusters: $(m.m)")
     println(io, "Total observations: $(m.nsum)")
@@ -384,13 +369,11 @@ function Base.show(io::IO, m::VarLmmModel)
     println(io)
 end
 
-include("mom.jl")
-# include("mom_avx.jl")
-# include("mom_nlp.jl")
+include("nls.jl")
 include("initialization.jl")
 include("nlp_unconstr.jl")
 include("df.jl")
-include("varlmm_rand.jl")
+include("rand.jl")
 include("multivariate_calculus.jl")
 include("sandwich.jl")
 

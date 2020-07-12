@@ -1,3 +1,7 @@
+# Test on a normal (conditional distribution of Y), normal (distribution of γ), 
+# , lognormal (distribution of ω) simulation data example
+module NormalNormalLognormalTest
+
 using BenchmarkTools, InteractiveUtils
 using LinearAlgebra, Profile, Random, Test, WiSER
 
@@ -5,11 +9,11 @@ using LinearAlgebra, Profile, Random, Test, WiSER
 Random.seed!(123)
 # dimensions
 m  = 1000 # number of individuals
-ns = rand(10:10, m) # numbers of observations per individual
+ns = rand(20:20, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
 q  = 3    # number of random effects, including intercept
 l  = 5    # number of WS variance covariates, including intercept
-obsvec = Vector{VarLmmObs{Float64}}(undef, m)
+obsvec = Vector{WSVarLmmObs{Float64}}(undef, m)
 # true parameter values
 βtrue = [ 0.1; 6.5; -3.5; 1.0; 5  ]
 τtrue = [-5.5; 1.5; -0.5; 0.0; 0.0]
@@ -46,10 +50,10 @@ for i in 1:m
     @views ysd = exp.(0.5 .* (W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end]))
     y = ysd .* randn(ns[i]) .+ μy
     # form a VarLmmObs instance
-    obsvec[i] = VarLmmObs(y, X, Z, W)
+    obsvec[i] = WSVarLmmObs(y, X, Z, W)
 end
 # form VarLmmModel
-vlmm = VarLmmModel(obsvec);
+vlmm = WSVarLmmModel(obsvec);
 
 @testset "fit! (start from LS fit)" begin
 println(); println(); println()
@@ -92,9 +96,9 @@ for solver in [
     display(Lγ); println()
 
     @info "fitting"
-    @time VarLMM.fit!(vlmm, solver, runs=2)
+    @time WiSER.fit!(vlmm, solver, runs=2)
     @info "obj at solution"
-    @show mom_obj!(vlmm, true, true)
+    @show nlsv_obj!(vlmm, true, true)
     @info "estimates at solution"
     println("β")
     display([βtrue vlmm.β]); println()
@@ -118,4 +122,5 @@ for solver in [
     show(vlmm)
 end
 
+end
 end

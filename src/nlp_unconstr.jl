@@ -1,13 +1,13 @@
 """
-    fit!(m::VarLmmModel, 
-    solver=IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100);
-    init = init_ls!(m), runs = 2)
+    fit!(m::WSVarLmmModel, 
+    solver=IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100);
+    init=init_ls!(m), runs = 2)
 
-Fit a `VarLMMModel` object using a weighted NLS method.
+Fit a `WSVarLMMModel` object using a weighted NLS method.
 
 # Positional arguments
-- `m::VarLmmModel`: Model to fit.
-- `solver`: Nonlinear programming solver to use. Choices include:  
+- `m::WSVarLmmModel`: Model to fit.
+- `solver`: Nonlinear programming solver to use. Common choices include:  
     - `Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)`.
     - `Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100)`.
     - `KNITRO.KnitroSolver(outlev=3)`. (Knitro is commercial software)
@@ -21,15 +21,17 @@ Fit a `VarLMMModel` object using a weighted NLS method.
     - `init_ls!(m)` (default): initialize by the least squares analytical solution.  
     - `init_mom!(m)`: initialize by the unweighted NLS (MoM).  
     - `m`: initilize from user supplied values in `m.τ` and `m.Lγ`.
-- `runs`: Number of weighted NLS runs; default is 2. Each run will use the 
+- `runs::Integer`: Number of weighted NLS runs; default is 2. Each run will use the 
     newest `m.τ` and `m.Lγ` to update the weight matrices `Vi` and solve the 
     new weighted NLS.
+- `parallel::Bool`: Multi-threading or not. Default is `false`. 
+- `verbose::Bool`: Verbose display or not, Default is `true`.
 """
 function fit!(
-    m        :: VarLmmModel,
+    m        :: WSVarLmmModel,
     solver = Ipopt.IpoptSolver(print_level=0, 
         mehrotra_algorithm = "yes", max_iter=100);
-    init     :: VarLmmModel = init_ls!(m),
+    init     :: WSVarLmmModel = init_ls!(m),
     runs     :: Integer = 2,
     parallel :: Bool = false,
     verbose  :: Bool = true)
@@ -68,7 +70,7 @@ function fit!(
     end
     # refresh objective, gradient, and Hessian
     mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
-    mom_obj!(m, true, true, false)
+    nlsv_obj!(m, true, true, false)
     # sandwich estimator
     sandwich!(m)
     m
@@ -80,8 +82,8 @@ end
 Translate model parameters in `m` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
-    par::Vector,
-    m::VarLmmModel{T}
+    par :: Vector,
+    m   :: WSVarLmmModel{T}
     ) where T <: BlasReal
     q, l = m.q, m.l
     # τ
@@ -101,8 +103,8 @@ end
 Translate optimization variables in `par` to the model parameters in `m`.
 """
 function optimpar_to_modelpar!(
-    m::VarLmmModel, 
-    par::Vector
+    m   :: WSVarLmmModel, 
+    par :: Vector
     )
     q, l = m.q, m.l
     # τ
@@ -118,8 +120,8 @@ function optimpar_to_modelpar!(
 end
 
 function MathProgBase.initialize(
-    m::VarLmmModel, 
-    requested_features::Vector{Symbol}
+    m                  :: WSVarLmmModel, 
+    requested_features :: Vector{Symbol}
     )
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -128,24 +130,24 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(m::VarLmmModel) = [:Grad, :Hess]
+MathProgBase.features_available(m::WSVarLmmModel) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-    m::VarLmmModel, 
-    par::Vector
+    m   :: WSVarLmmModel, 
+    par :: Vector
     )
     optimpar_to_modelpar!(m, par)
-    mom_obj!(m, false, false, false)
+    nlsv_obj!(m, false, false, false)
 end
 
 function MathProgBase.eval_grad_f(
-    m::VarLmmModel, 
-    grad::Vector, 
-    par::Vector
+    m    :: WSVarLmmModel, 
+    grad :: Vector, 
+    par  :: Vector
     )
     q, l = m.q, m.l
     optimpar_to_modelpar!(m, par) 
-    obj = mom_obj!(m, true, false, false)
+    obj = nlsv_obj!(m, true, false, false)
     # gradient wrt τ
     copyto!(grad, m.∇τ)
     # gradient wrt Lγ
@@ -157,11 +159,11 @@ function MathProgBase.eval_grad_f(
     end
 end
 
-MathProgBase.eval_g(m::VarLmmModel, g, par) = nothing
-MathProgBase.jac_structure(m::VarLmmModel) = Int[], Int[]
-MathProgBase.eval_jac_g(m::VarLmmModel, J, par) = nothing
+MathProgBase.eval_g(m::WSVarLmmModel, g, par) = nothing
+MathProgBase.jac_structure(m::WSVarLmmModel) = Int[], Int[]
+MathProgBase.eval_jac_g(m::WSVarLmmModel, J, par) = nothing
 
-function MathProgBase.hesslag_structure(m::VarLmmModel)
+function MathProgBase.hesslag_structure(m::WSVarLmmModel)
     # our Hessian is a dense matrix, work on the upper triangular part
     npar = m.l + ◺(m.q)
     arr1 = Vector{Int}(undef, ◺(npar))
@@ -175,12 +177,12 @@ function MathProgBase.hesslag_structure(m::VarLmmModel)
     return (arr1, arr2)
 end
 
-function MathProgBase.eval_hesslag(m::VarLmmModel, H::Vector{T},
+function MathProgBase.eval_hesslag(m::WSVarLmmModel, H::Vector{T},
     par::Vector{T}, σ::T, μ::Vector{T}) where {T}
     q, l = m.q, m.l
     # refresh obj, gradient, and hessian
     optimpar_to_modelpar!(m, par)
-    mom_obj!(m, true, true, false)
+    nlsv_obj!(m, true, true, false)
     # Hττ
     idx = 1
     @inbounds for j in 1:l, i in 1:j

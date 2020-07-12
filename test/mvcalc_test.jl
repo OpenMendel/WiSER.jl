@@ -1,4 +1,5 @@
-using BenchmarkTools, LinearAlgebra, Random, Test, VarLMM
+module MVCalculusTest
+using BenchmarkTools, LinearAlgebra, Random, Test, WiSER
 
 @testset "kron_axpy!" begin
 Random.seed!(123)
@@ -17,7 +18,6 @@ display(bm); println()
 Y2 = zeros(n * p, m * q)
 kron_axpy!(transpose(A), X, Y2)
 @test Y2 == kron(transpose(A), X)
-# bm = @benchmark kron_axpy!($(transpose(A)), $X, $Y2) setup=(fill!($Y2, 0))
 bm = @benchmark kron_axpy!($(transpose(A)), $X, $Y2) setup=(fill!($Y2, 0))
 display(bm); println()
 @test allocs(bm) == 0
@@ -78,7 +78,7 @@ end
 @testset "Ct_At_kron_A_KC" begin
 Random.seed!(123)
 q = 5
-q◺ = VarLMM.◺(q)
+q◺ = WiSER.◺(q)
 A = randn(q, q); A = A'A * LowerTriangular(randn(q, q))
 H = Ct_At_kron_A_KC(A)
 Cq  = CopyMatrix(q)
@@ -94,7 +94,7 @@ end
 @testset "Ct_A_kron_B_C" begin
 Random.seed!(123)
 q = 5
-q◺ = VarLMM.◺(q)
+q◺ = WiSER.◺(q)
 A = randn(q, q); A = A'A
 B = randn(q, q); B = B'B
 H = Ct_A_kron_B_C(A, B)
@@ -121,4 +121,5 @@ Cq  = CopyMatrix(q)
 bm = @benchmark Ct_A_kr_B!($H, $A, $B) setup=(fill!($H, 0))
 display(bm); println()
 @test allocs(bm) == 0
+end
 end

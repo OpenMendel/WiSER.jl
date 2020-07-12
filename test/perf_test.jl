@@ -1,5 +1,6 @@
+module PerfTest
 using BenchmarkTools, InteractiveUtils
-using LinearAlgebra, Profile, Random, Test, VarLMM
+using LinearAlgebra, Profile, Random, Test, WiSER
 
 @info "generate data"
 Random.seed!(123)
@@ -9,7 +10,7 @@ ns = rand(5:11, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
 q  = 3    # number of random effects, including intercept
 l  = 5    # number of WS variance covariates, including intercept
-obsvec = Vector{VarLmmObs{Float64}}(undef, m)
+obsvec = Vector{WSVarLmmObs{Float64}}(undef, m)
 # true parameter values
 βtrue = [0.1; 6.5; -3.5; 1.0; 5]
 τtrue = [-1.5; 1.5; -0.5; zeros(l - 3)]
@@ -44,10 +45,10 @@ for i in 1:m
     @views ysd = exp.(0.5 .* (W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end]))
     y = ysd .* randn(ns[i]) .+ μy
     # form a VarLmmObs instance
-    obsvec[i] = VarLmmObs(y, X, Z, W)
+    obsvec[i] = WSVarLmmObs(y, X, Z, W)
 end
 # form VarLmmModel
-vlmm = VarLmmModel(obsvec);
+vlmm = WSVarLmmModel(obsvec);
 
 @testset "init_ls!" begin
 # least squares starting point
@@ -58,12 +59,12 @@ init_ls!(vlmm)
 # @info "type stability"
 # @code_warntype init_ls!(vlmm)
 @info "benchmark"
-bm = @benchmark init_ls!($vlmm)
+bm = @benchmark init_ls!($vlmm, gniters=5)
 display(bm); println()
-@test allocs(bm) == 0
+@test_skip allocs(bm) == 0
 # @info "profile"
 # Profile.clear()
-# @profile @btime init_ls!(vlmm)
+# @profile @btime init_ls!(vlmm; gniters=5)
 # Profile.print(format=:flat)
 end
 
@@ -93,7 +94,7 @@ display(bm); println()
 # Profile.print(format=:flat)
 end
 
-@testset "mom_obj! (unweighted)" begin
+@testset "nlsv_obj! (unweighted)" begin
 # set parameter values to be the truth
 copy!(vlmm.β, βtrue)
 copy!(vlmm.τ, τtrue)
@@ -105,7 +106,7 @@ vlmm.Lγ  .= Lγ
 # evaluate objective (at truth)
 @info "obj/grad/hessian at true parameter values"
 vlmm.iswtnls[1] = false
-@show mom_obj!(vlmm, true, true, true)
+@show nlsv_obj!(vlmm, true, true, true)
 @show vlmm.∇β
 @show vlmm.∇τ
 @show vlmm.∇Lγ
@@ -114,22 +115,22 @@ H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
 @test norm(H - transpose(H)) / norm(H) < 1e-8
 @test all(eigvals(Symmetric(H)) .≥ 0)
 # @info "type stability"
-# @code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-# @code_warntype mom_obj!(vlmm, true)
+# @code_warntype nlsv_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
+# @code_warntype nlsv_obj!(vlmm, true)
 @info "benchmark"
-# bm = @benchmark mom_obj!($vlmm.data[1], $vlmm.β, $vlmm.τ, $vlmm.Lγ, true)
+# bm = @benchmark nlsv_obj!($vlmm.data[1], $vlmm.β, $vlmm.τ, $vlmm.Lγ, true)
 # display(bm)
 # @test allocs(bm) == 0
-bm = @benchmark mom_obj!($vlmm, true, true, true)
+bm = @benchmark nlsv_obj!($vlmm, true, true, true)
 display(bm); println()
 @test allocs(bm) == 0
 # @info "profile"
 # Profile.clear()
-# @profile @btime mom_obj!($vlmm, true, true)
+# @profile @btime nlsv_obj!($vlmm, true, true)
 # Profile.print(format=:flat)
 end
 
-@testset "mom_obj! (weighted)" begin
+@testset "nlsv_obj! (weighted)" begin
 # set parameter values to be the truth
 copy!(vlmm.β, βtrue)
 copy!(vlmm.τ, τtrue)
@@ -141,7 +142,7 @@ vlmm.Lγ  .= Lγ
 # update_wtmat then evaluate at the truth
 update_wtmat!(vlmm)
 vlmm.iswtnls[1] = true
-@show mom_obj!(vlmm, true, true, true)
+@show nlsv_obj!(vlmm, true, true, true)
 @show vlmm.∇β
 @show vlmm.∇τ
 @show vlmm.∇Lγ
@@ -150,19 +151,19 @@ H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
 @test norm(H - transpose(H)) / norm(H) < 1e-8
 @test all(eigvals(Symmetric(H)) .≥ 0)
 # @info "type stability"
-# @code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-# @code_warntype mom_obj!(vlmm, true)
+# @code_warntype nlsv_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
+# @code_warntype nlsv_obj!(vlmm, true)
 @info "benchmark"
-bm = @benchmark mom_obj!($vlmm, true, true, true)
+bm = @benchmark nlsv_obj!($vlmm, true, true, true)
 display(bm); println()
 @test allocs(bm) == 0
 # @info "profile"
 # Profile.clear()
-# @profile @btime mom_obj!($vlmm, true, true, true)
+# @profile @btime nlsv_obj!($vlmm, true, true, true)
 # Profile.print(format=:flat)
 end
 
-@testset "mom_obj! (weighted) - parallel" begin
+@testset "nlsv_obj! (weighted) - parallel" begin
 # set parameter values to be the truth
 copy!(vlmm.β, βtrue)
 copy!(vlmm.τ, τtrue)
@@ -175,7 +176,7 @@ vlmm.Lγ  .= Lγ
 update_wtmat!(vlmm)
 vlmm.iswtnls[1] = true
 vlmm.ismthrd[1] = true
-@show mom_obj!(vlmm, true, true, true)
+@show nlsv_obj!(vlmm, true, true, true)
 @show vlmm.∇β
 @show vlmm.∇τ
 @show vlmm.∇Lγ
@@ -184,15 +185,16 @@ H = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
 @test norm(H - transpose(H)) / norm(H) < 1e-8
 @test all(eigvals(Symmetric(H)) .≥ 0)
 # @info "type stability"
-# @code_warntype mom_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
-# @code_warntype mom_obj!(vlmm, true)
+# @code_warntype nlsv_obj!(vlmm.data[1], vlmm.β, vlmm.τ, vlmm.Lγ, true)
+# @code_warntype nlsv_obj!(vlmm, true)
 @info "benchmark"
 vlmm.iswtnls[1] = true
 vlmm.ismthrd[1] = true
-bm = @benchmark mom_obj!($vlmm, true, true, true)
+bm = @benchmark nlsv_obj!($vlmm, true, true, true)
 display(bm); println()
 # @info "profile"
 # Profile.clear()
-# @profile @btime mom_obj!($vlmm, true, true, true)
+# @profile @btime nlsv_obj!($vlmm, true, true, true)
 # Profile.print(format=:flat)
+end
 end

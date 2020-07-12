@@ -1,12 +1,12 @@
 """
-    sandwich!(m::VarLmmModel)
+    sandwich!(m::WSVarLmmModel)
 
 Calculate the sandwich estimator of the asymptotic covariance of the parameters, 
 based on values `m.Hββ`, `m.Hττ`, `m.HτLγ`, `m.HLγLγ`, `m.data[i].∇β`,
 `m.data[i].∇τ`, and `m.data[i].∇Lγ`. `m.vcov` is updated by the sandwich 
 estimator and returned.
 """
-function sandwich!(m::VarLmmModel{T}) where T <: BlasReal
+function sandwich!(m::WSVarLmmModel{T}) where T <: BlasReal
     p, q, l = m.p, m.q, m.l
     minv    = inv(m.m)
     # form A matrix in the sandwich formula

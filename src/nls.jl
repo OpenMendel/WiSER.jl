@@ -1,16 +1,16 @@
 """
-    mom_obj!(obs::VarLmmObs, β, τ, Lγ, needgrad::Bool)  
-    mom_obj!(m::VarLmmModel; needgrad::Bool)
+    nlsv_obj!(obs::WSVarLmmObs, β, τ, Lγ, needgrad::Bool) 
+    nlsv_obj!(m::WSVarLmmModel; needgrad::Bool)
 
-Evaluate the method of moments objective function for the given data and 
-parameter values. Gradient is also calculated if `needgrad=true`. hessian
-is calculated is `needhess=true`. It updates residuals before evaluating 
-if `updateres=true`. If `m.weighted[1]` = true, it will evaluate the weighted
-`mom_obj!()` function. `update_wtmat!(m)` should be called prior to using the 
-weighted version of `mom_obj!()` to update the weight matrix components. 
+Evaluate the nonlinear least squares (NLS) criterion for variance estimation at 
+the given data and parameter values. Gradient is calculated if `needgrad=true`. 
+Expected Hessian is calculated if `needhess=true`.  If `updateres=true`, update 
+mean level residuals first. If `m.iswtnls[1]=true`, evaluate the weighted
+`nlsv_obj!()` function. `update_wtmat!(m)` should be called to update the 
+weight matrix componentsprior to using the weighted version of `nlsv_obj!()`. 
 """
-function mom_obj!(
-    obs       :: VarLmmObs{T},
+function nlsv_obj!(
+    obs       :: WSVarLmmObs{T},
     β         :: Vector{T},
     τ         :: Vector{T},
     Lγ        :: Matrix{T},  # must be lower triangular
@@ -110,8 +110,8 @@ function mom_obj!(
     obs.obj[1]
 end
 
-function mom_obj!(
-    obs       :: VarLmmObs{T},
+function nlsv_obj!(
+    obs       :: WSVarLmmObs{T},
     β         :: Vector{T},
     τ         :: Vector{T},
     Lγ        :: Matrix{T}, # must be lower triangular
@@ -298,13 +298,13 @@ end
 
 
 """
-    mom_obj!(m::VarLMM, needgrad::Bool, needhess:Bool, updateres::Bool)
+    nlsv_obj!(m::WSVarLmmModel, needgrad::Bool, needhess:Bool, updateres::Bool)
 
-Calculate the objective function of a `VarLMM` object and optionally the 
+Calculate the objective function of a `WSVarLmmModel` object and optionally the 
 gradient and hessian.
 """
-function mom_obj!(
-    m         :: VarLmmModel{T},
+function nlsv_obj!(
+    m         :: WSVarLmmModel{T},
     needgrad  :: Bool = true,
     needhess  :: Bool = true,
     updateres :: Bool = false
@@ -323,7 +323,7 @@ function mom_obj!(
     end
     if m.ismthrd[1]
         Threads.@threads for obs in m.data
-            mom_obj!(obs, m.β, m.τ, m.Lγ, Val(m.iswtnls[1]),
+            nlsv_obj!(obs, m.β, m.τ, m.Lγ, Val(m.iswtnls[1]),
                 needgrad, needhess, updateres)
         end
         for obs in m.data
@@ -340,7 +340,7 @@ function mom_obj!(
         end
     else
         for obs in m.data
-            obj += mom_obj!(obs, m.β, m.τ, m.Lγ, Val(m.iswtnls[1]),
+            obj += nlsv_obj!(obs, m.β, m.τ, m.Lγ, Val(m.iswtnls[1]),
                 needgrad, needhess, updateres)
             if needgrad
                 BLAS.axpy!(T(1), obs.∇τ   , m.∇τ )
@@ -361,11 +361,11 @@ end
 """
     update_res!(obs, β)
 
-Update the residual vector of `obs::VarLmmObs` according to `β`.
+Update the residual vector of `obs::WSVarLmmObs` according to `β`.
 """
 function update_res!(
-    obs::VarLmmObs{T}, 
-    β::Vector{T}
+    obs :: WSVarLmmObs{T}, 
+    β   :: Vector{T}
     ) where T <: BlasReal
     BLAS.gemv!('T', T(-1), obs.Xt, β, T(1), copyto!(obs.res, obs.y))
     obs.res2      .= abs2.(obs.res)
@@ -375,11 +375,11 @@ function update_res!(
 end
 
 """
-    update_res!(m::VarLmmModel)
+    update_res!(m::WSVarLmmModel)
 
 Update residual vector of each observation in `m` according to `m.β`.
 """
-function update_res!(m::VarLmmModel{T}) where T <: BlasReal
+function update_res!(m::WSVarLmmModel{T}) where T <: BlasReal
     for obs in m.data
         update_res!(obs, m.β)
     end
@@ -387,7 +387,7 @@ function update_res!(m::VarLmmModel{T}) where T <: BlasReal
 end
 
 """
-    update_wtmat!(m::VarLmmModel)
+    update_wtmat!(m::WSVarLmmModel)
 
 Update the observation weight matrix according to the parameter values 
 `m.τ` and `m.Lγ`. Update `m.β` by WLS and update the residuals accordingly. 
@@ -398,7 +398,7 @@ gradient, and Hessian. At return,
 - `m.∇β  = sum_i Xi' inv(Vi) ri`
 - `m.Hββ = sum_i Xi' inv(Vi) Xi`
 """
-function update_wtmat!(m::VarLmmModel{T}) where T <: BlasReal
+function update_wtmat!(m::WSVarLmmModel{T}) where T <: BlasReal
     p, q = m.p, m.q
     # update Dinv and U such that Vinv = Dinv - U * U'
     # accumulate quantities for updating β

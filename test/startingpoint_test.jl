@@ -1,4 +1,8 @@
-using VarLMM, DataFrames, Random, LinearAlgebra, Test
+# This test reproduces a case, where all starting strategies failed to 
+# produce a reasonable estimate. Estimated τ diverges.
+module DebugTest
+
+using DataFrames, LinearAlgebra, Random, Test, WiSER
 
 function createvlmm(t, k, j)
     p  = 5    # number of fixed effects, including intercept
@@ -34,7 +38,7 @@ function createvlmm(t, k, j)
 
     m = samplesizes[t]
     ni = ns[k] # number of observations per individual
-    obsvec = Vector{VarLmmObs{Float64}}(undef, m)
+    obsvec = Vector{WSVarLmmObs{Float64}}(undef, m)
     println("rep $j obs per person $ni samplesize $m")
     Random.seed!(j + 100000k + 1000t)
     for i in 1:m
@@ -57,10 +61,10 @@ function createvlmm(t, k, j)
         @views vy = exp.(W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end])
         y = rand(MvNormal(μy, Diagonal(vy)))
         # form a VarLmmObs instance
-        obsvec[i] = VarLmmObs(y, X, Z, W)
+        obsvec[i] = WSVarLmmObs(y, X, Z, W)
     end
     # form VarLmmModel
-    vlmm = VarLmmModel(obsvec);
+    vlmm = WSVarLmmModel(obsvec);
     return vlmm
 end
 
@@ -73,7 +77,7 @@ vlmm1 = createvlmm(1, 1, 203) # trouble case
 # js = [35, 53, 109, 148, 168, 174, 100, 7, 203, 233]
 
 # solver = Ipopt.IpoptSolver(print_level=0)
-solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100)
+solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)
 # solver = NLopt.NLoptSolver(algorithm = :LN_BOBYQA, 
 #     ftol_rel = 1e-12, ftol_abs = 1e-8, maxeval = 10000)
 # solver = NLopt.NLoptSolver(algorithm = :LD_SLSQP, maxeval = 4000)
@@ -81,7 +85,7 @@ solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=1
 # solver = NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000)
 
 @info "starting point by LS init_ls!"
-VarLMM.init_ls!(vlmm1)
+WiSER.init_ls!(vlmm1)
 println("β"); display(vlmm1.β); println()
 println("τ"); display(vlmm1.τ); println()
 println("Lγ"); display(vlmm1.Lγ); println()
@@ -126,3 +130,5 @@ println("Lγ"); display(vlmm1.Lγ); println()
 @show norm(vlmm1.β - βtrue)
 @show norm(vlmm1.τ[2:end] - τtrue[2:end])
 @show norm(vlmm1.Lγ - Lγ)
+
+end

@@ -1,17 +1,19 @@
 """
-    rand!(m::VarLmmModel; respdist = MvNormal, γωdist = MvNormal, Σγω = [], kwargs...)
+    rand!(m::WSVarLmmModel; respdist = MvNormal, γωdist = MvNormal, Σγω = [], kwargs...)
 
 Replaces the responses `m.data[i].y` with a simulated response based on:
-
 - The data in the model object's data `X, Z, W` matrices. 
 - The parameter values in the model.
 - The condistribution distribution of the response given the random effects.
 - The distribution of the random effects.
 - If simulating from MvTDistribution, you must specify the degrees of freedom via `df = x`.
-
 """
-function rand!(m::VarLmmModel; respdist = MvNormal, 
-    γωdist = MvNormal, Σγω = [], kwargs...)
+function rand!(
+    m :: WSVarLmmModel; 
+    respdist = MvNormal, 
+    γωdist   = MvNormal, 
+    Σγω      = [], 
+    kwargs...)
     q = m.q
     isempty(Σγω) ? Σγω = [m.Lγ * transpose(m.Lγ) zeros(q); 
         zeros(1, q) 0.0] : Σγω
@@ -21,7 +23,6 @@ function rand!(m::VarLmmModel; respdist = MvNormal,
     lω    = Lγω[q + 1, q + 1]
     γω = Vector{Float64}(undef, q + 1)
     z  = similar(γω)
-
     for ob in m.data
         copyto!(ob.y, rvarlmm(transpose(ob.Xt), 
         transpose(ob.Zt), transpose(ob.Wt),
@@ -30,14 +31,12 @@ function rand!(m::VarLmmModel; respdist = MvNormal,
     end
 end
 
-
 """
     rvarlmm(Xs::Array{Matrix}, Zs::Array{Matrix},
     Ws::Array{Matrix}, β::Vector, τ::Vector;
     respdist = MvNormal, Σγ=[], Σγω=[])
 
-
-Generate a simulated response from the VarLMM model based on:
+Generate a simulated response from the `WSVarLmmModel` based on:
 - `Xs`: array of each clusters `X`: mean fixed effects covariates
 - `Zs`: array of each clusters `Z`: random location effects covariates
 - `Ws`: array of each clusters `W`: within-subject variance fixed effects covariates
@@ -194,4 +193,4 @@ function eval_respdist(μy, vy, respdist; df = [])
     end
 end 
 
-respdists() = return [:MvNormal, :MvTDist, :Gamma, :InverseGaussian, :InverseGamma, :Uniform]
+respdists() = [:MvNormal, :MvTDist, :Gamma, :InverseGaussian, :InverseGamma, :Uniform]

@@ -1,15 +1,16 @@
 """
-    init_ls!(m::VarLmmModel; gniters::Integer = 5)
+    init_ls!(m::WSVarLmmModel; gniters::Integer = 5)
 
-Initialize parameters of a `VarLmmModel` object from least squares estimate. 
+Initialize parameters of a `WSVarLmmModel` object from least squares estimate. 
 `m.β`  is initialized to be `inv(sum(xi'xi)) * sum(xi'yi)`. 
 `m.Σγ` is initialized to be `inv(sum(zi'zi⊗zi'zi)) * sum(zi'ri⊗zi'ri)`.  
 `m.τ`  is initialized to be `inv(sum(wi'wi)) * sum(wi'log(abs2(ri)))`.  
 If `gniters > 0`, run `gniters` Gauss-Newton iterations to improve τ.
 """
 function init_ls!(
-    m       :: VarLmmModel{T};
-    gniters :: Integer = 5) where T <: BlasReal
+    m       :: WSVarLmmModel{T};
+    gniters :: Integer = 5
+    ) where T <: BlasReal
     # dimensions
     q, l = m.q, m.l
     # LS estimate for β
@@ -21,7 +22,7 @@ function init_ls!(
     # accumulate quantities for initilizing Σγ and τ
     fill!(m.∇τ , 0) # to accumulate Wi' * log(ri.^2)
     fill!(m.∇Σγ, 0) # to accumulate Zi'ri ⊗ Zi'ri
-    fill!(m.Lγ, 0)  # scratch space to accumulate Zi'diag(r) diag(r)Zi
+    fill!(m.Lγ , 0)  # scratch space to accumulate Zi'diag(r) diag(r)Zi
     for obs in m.data
         n = length(obs.y)
         # storage_n1 = log(diag(rr'))
@@ -111,24 +112,24 @@ end
 
 
 """
-    init_mom!(m::VarLmmModel, solver; init = init_ls!(m), parallel = false)
+    init_mom!(m::WSVarLmmModel, solver; init = init_ls!(m), parallel = false)
 
 Initialize `τ` and `Lγ` of a `VarLmmModel` object by method of moment (MoM) 
 using residulas in `m.obs[i].res`. It involves solving an unweighted NLS problem.
 
 # Position arguments
-- `m::VarLmmModel`: A `VarLmmModel` object.
-- `solver`: Default is IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100).
+- `m`: A `WSVarLmmModel` object.
+- `solver`: NLP solver. Default is `IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)`.
 
 # Keyword arguments
-- `init`: Initlizer for the NLS problem. Default is `init_ls!(m)`. If `init = m`, 
+- `init`: Initlizer for the NLS problem. Default is `init_ls!(m)`. If `init=m`, 
 then it uses the values provided in `m.τ` and `m.Lγ` as starting point.  
 - `parallel::Bool`: Multi-threading. Default is `false`.
 """
 function init_mom!(
-    m::VarLmmModel{T},
-    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100);
-    init     :: VarLmmModel = init_ls!(m),
+    m        :: WSVarLmmModel{T},
+    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100);
+    init     :: WSVarLmmModel = init_ls!(m),
     parallel :: Bool = false
     ) where T <: BlasReal
     # set up NLP optimization problem
