@@ -1,0 +1,29 @@
+language: julia
+os:
+  - linux
+  - osx
+  - windows
+julia:
+  - 1.0
+  - 1.4
+  - nightly
+notifications:
+  email: false
+git:
+  depth: 99999999
+
+after_script:
+  - julia -e 'using Pkg, WiSER; cd(joinpath(dirname(pathof(WiSER)), "..")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder()); Coveralls.submit(process_folder())'
+
+jobs:
+  allow_failures:
+    - julia: nightly    
+  include:
+    - stage: "Documentation"
+      julia: 1.4
+      os: linux
+      script:
+        - julia -e 'using Pkg; Pkg.add("Documenter")'
+        - julia -e 'using WiSER; include(joinpath(dirname(pathof(WiSER)), "..", "docs", "make.jl"))'
+      after_script: skip
+      after_success: skip  
