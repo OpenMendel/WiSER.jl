@@ -27,7 +27,7 @@ function nlsv_obj!(
     # update the residual vector ri = y_i - Xi β
     updateres && update_res!(obs, β)
     # obs.storage_qq = (Z' * Z) * L
-    copy!(obs.storage_qq, obs.ztz)
+    copyto!(obs.storage_qq, obs.ztz)
     BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.storage_qq)
     # ∇Lγ = (Z' * Z) * L * L' * (Z' * Z) for now, needed for gradient later
     needgrad && BLAS.syrk!('U', 'N', T(1), obs.storage_qq, T(0), obs.∇Lγ)
@@ -36,12 +36,12 @@ function nlsv_obj!(
     # obs.storage_qq = L' * (Z' * Z) * L
     BLAS.trmm!('L', 'L', 'T', 'N', T(1), Lγ, obs.storage_qq)
     # storage_qn = L' * Z'
-    copy!(obs.storage_qn, obs.Zt)
+    copyto!(obs.storage_qn, obs.Zt)
     BLAS.trmm!('L', 'L', 'T', 'N', T(1), Lγ, obs.storage_qn)
     # storage_q◺n = Cq' * (L'Z' ⊙ Z'), needed for hessian later
     needhess && Ct_A_kr_B!(fill!(obs.storage_q◺n, 0), obs.storage_qn, obs.Zt)
     # storage_q1 = L' * Z' * res
-    copy!(obs.storage_q1, obs.ztres)
+    copyto!(obs.storage_q1, obs.ztres)
     BLAS.trmv!('L', 'T', 'N', Lγ, obs.storage_q1)
     # update W * τ
     mul!(obs.expwτ, transpose(obs.Wt), τ)
@@ -236,7 +236,7 @@ function nlsv_obj!(
         #wrt Lγ
         # ∇Lγ = -2(Z' * Vinv * R *  Vinv * Z * L
         # obs.storage_qq = (Z' * Vinv * Z) * L
-        copy!(obs.storage_qq, obs.Zt_Vinv_Z)
+        copyto!(obs.storage_qq, obs.Zt_Vinv_Z)
         BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.storage_qq)
         #∇Lγ = Z' * Vinv * Z * L * L' * Z' * Vinv * Z 
         BLAS.syrk!('U', 'N', T(1), obs.storage_qq, T(0), obs.∇Lγ)
@@ -277,14 +277,14 @@ function nlsv_obj!(
         # HτLγ = 2 W' * Diagonal(expwτ) * (L'Z'(V^-1) ⊙ Z'(V^-1))' * Cq
         # storage_ln = W' * Diagonal(expwτ) was computed above
         # storage_q◺n = Cq' * (L'Z'(V^-1) ⊙ Z'(V^-1)) 
-        copy!(obs.storage_qn, obs.Zt_Vinv)
+        copyto!(obs.storage_qn, obs.Zt_Vinv)
         BLAS.trmm!('L', 'L', 'T', 'N', one(T), Lγ, obs.storage_qn)
         Ct_A_kr_B!(obs.storage_q◺n, obs.storage_qn, obs.Zt_Vinv)
         BLAS.gemm!('N', 'T', T(2), obs.storage_ln, obs.storage_q◺n, zero(T), obs.HτLγ)
         #wrt HLγLγ
         # HLγLγ = 2 [ C'(L'Z'(V^-1)ZL ⊗ Z'(V^-1)Z)C + C'(L'Z'(V^-1)Z ⊗ Z'(V^-1)ZL)KC ]
         # obs.storage_qq = (Z' (V^-1) Z) * L
-        copy!(obs.storage_qq, obs.Zt_Vinv_Z)
+        copyto!(obs.storage_qq, obs.Zt_Vinv_Z)
         BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.storage_qq)
         # HLγLγ = C'(L'Z' (V^-1) Z ⊗ Z' (V^-1) ZL)KC first
         Ct_At_kron_A_KC!(fill!(obs.HLγLγ, 0), obs.storage_qq)
