@@ -336,7 +336,7 @@ coefnames(m::WSVarLmmModel) = [m.meannames; m.wsvarnames]
 coef(m::WSVarLmmModel) = [m.β; m.τ]
 nobs(m::WSVarLmmModel) = m.nsum
 nclusters(m::WSVarLmmModel) = m.m
-stderror(m::WSVarLmmModel) = [sqrt(m.vcov[i, i] / m.m) for i in 1:(m.p + m.l)]
+stderror(m::WSVarLmmModel) = [sqrt(m.vcov[i, i]) for i in 1:(m.p + m.l)]
 vcov(m::WSVarLmmModel) = m.vcov # include variance parts of Lγ? 
 
 confint(m::WSVarLmmModel, level::Real) = hcat(coef(m), coef(m)) +

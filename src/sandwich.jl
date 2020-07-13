@@ -44,4 +44,5 @@ function sandwich!(m::WSVarLmmModel{T}) where T <: BlasReal
     # calculate vcov
     mul!(Aevec , m.Ainv, m.B   ) # use Avec as scratch space
     mul!(m.vcov,  Aevec, m.Ainv)
+    m.vcov .*= minv
 end
