@@ -1,8 +1,7 @@
 module WiSER
 
-using DataFrames, Distributions, LinearAlgebra, MathProgBase
-using Permutations, Printf, Reexport, Statistics, StatsModels
-using LoopVectorization, JuliaDB
+using DataFrames, JuliaDB, LinearAlgebra, MathProgBase
+using Permutations, Printf, Reexport, Statistics
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
