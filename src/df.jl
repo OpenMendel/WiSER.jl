@@ -56,6 +56,9 @@ Constructor of `WSVarLmmModel` from a `DataFrame` or `IndexedTable`.
 - `datatable:` data table holding all of the data for the model. It can be a 
 `DataFrame` or column-based table such as an `IndexedTable` from JuliaDB. 
 
+# Keyword arguments
+- `wtvar`: variable name corresponding to the observation weights in the datatable.
+
 # Example
 ```
 vlmm3 = WSVarLmmModel(@formula(y ~ 1 + x2 + x3 + x4 + x5),
@@ -72,15 +75,28 @@ function WSVarLmmModel(
     )
     idvar = Symbol(idvar)
     function varlmmobs(tab)
+        tab = StatsModels.columntable(tab)
+        tab, _ = StatsModels.missing_omit(tab, alltermformula)
+
         y, X = modelcols(meanformula, tab)
         Z    = modelmatrix(reformula, tab)
         W    = modelmatrix(wsvarformula, tab)
         return WSVarLmmObs(y, X, Z, W)
     end
+    #for schema in missing values of y, otherwise it will dummy-encode.
+    ydict = Dict(Symbol(meanformula.lhs) => ContinuousTerm)
+
     # apply df-wide schema
-    meanformula  = apply_schema(meanformula, schema(meanformula, datatable))
-    reformula    = apply_schema(reformula, schema(reformula, datatable))
-    wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable))
+    meanformula  = apply_schema(meanformula, schema(meanformula, datatable, ydict))
+    reformula    = apply_schema(reformula, schema(reformula, datatable, ydict))
+    wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable, ydict))
+
+    # collect all terms to perform missing_omit properly
+    alltermformula = meanformula.lhs ~ sum(term.(union(terms(meanformula.rhs),
+      terms(reformula.rhs), terms(wsvarformula.rhs))))
+    alltermformula = apply_schema(alltermformula, schema(alltermformula, datatable, ydict))
+
+
     # variable names
     meanname  = StatsModels.coefnames(meanformula.rhs)
     meanname  = ["β$i: " for i in 1:length(meanname)] .* meanname
