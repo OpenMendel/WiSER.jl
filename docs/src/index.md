@@ -21,12 +21,8 @@ Use the backspace key to return to the Julia REPL.
 
 ```julia
 # for this tutorial
-using CSV, JuliaDB, Random, WiSER
+using CSV, DataFrames, JuliaDB, Random, WiSER
 ```
-
-    ┌ Info: Precompiling WiSER [2ff19380-1883-49fc-9d10-450face6b90c]
-    └ @ Base loading.jl:1260
-
 
 ## Example data
 
@@ -35,12 +31,8 @@ The example dataset, `sbp.csv`, is contained in `data` folder of the package. It
 
 ```julia
 filepath = normpath(joinpath(dirname(pathof(WiSER)), "../data/"))
-df = CSV.read(filepath * "sbp.csv")
+df = DataFrame!(CSV.File(filepath * "sbp.csv"))
 ```
-
-    ┌ Warning: `CSV.read(input; kw...)` is deprecated in favor of `DataFrame!(CSV.File(input; kw...))`
-    └ @ CSV /Users/huazhou/.julia/packages/CSV/OM6FO/src/CSV.jl:40
-
 
 
 
@@ -344,7 +336,7 @@ WiSER.fit!(vlmm_bmi, runs=3)
 
 ### Try different nonlinear programming (NLP) solvers 
 
-A different solver may remedy the issue. By default, `MiSER.jl` uses the [Ipopt](https://github.com/jump-dev/Ipopt.jl) solver, but it can use any solver that supports [MathProgBase.jl](https://github.com/JuliaOpt/MathProgBase.jl). Check documentation of `fit!` for commonly used NLP solvers. In our experience, [Knitro.jl](https://github.com/JuliaOpt/KNITRO.jl) works the best, but it is a commercial software.
+A different solver may remedy the issue. By default, `WiSER.jl` uses the [Ipopt](https://github.com/jump-dev/Ipopt.jl) solver, but it can use any solver that supports [MathProgBase.jl](https://github.com/JuliaOpt/MathProgBase.jl). Check documentation of `fit!` for commonly used NLP solvers. In our experience, [Knitro.jl](https://github.com/JuliaOpt/KNITRO.jl) works the best, but it is a commercial software.
 
 
 ```julia
@@ -510,6 +502,7 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes"))
 
 ```julia
 # use Knitro (require installation of Knitro software and Knitro.jl)
+# Using KNITRO
 # WiSER.fit!(vlmm, KNITRO.KnitroSolver(outlev=3));
 ```
 
