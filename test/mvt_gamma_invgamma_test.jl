@@ -80,14 +80,20 @@ vlmm = WSVarLmmModel(obsvec);
 println(); println(); println()
 for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
-    Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)
-    # Ipopt.IpoptSolver(print_level=5, 
-    # watchdog_shortened_iter_trigger=3, 
-    # max_iter=100),# helped remedy, best number
+    Ipopt.IpoptSolver(print_level = 0, 
+        mehrotra_algorithm="yes", 
+        # warm_start_bound_push = 1e-16,
+        # warm_start_bound_frac = 1e-16,
+        # warm_start_slack_bound_frac = 1e-9,
+        # warm_start_slack_bound_push = 1e-9,
+        # warm_start_mult_bound_push = 1e-6,
+        warm_start_init_point = "yes",
+        max_iter=100),
+    # Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100),
     # Ipopt.IpoptSolver(print_level = 0)
     # Ipopt.IpoptSolver(print_level = 3, hessian_approximation = "limited-memory"),
-    # Ipopt.IpoptSolver(print_level = 3, obj_scaling_factor = 1 / m) # less accurae, grad at 10^{-1}
-    # Ipopt.IpoptSolver(print_level = 3, mu_strategy = "adaptive") # same speek    
+    # Ipopt.IpoptSolver(print_level = 3, obj_scaling_factor = 1 / m) # instable
+    # Ipopt.IpoptSolver(print_level = 5, mu_strategy = "adaptive") # same speed
     # NLopt.NLoptSolver(algorithm = :LD_SLSQP, maxeval = 4000)
     # NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000),
     # NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000)

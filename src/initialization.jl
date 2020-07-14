@@ -119,7 +119,8 @@ using residulas in `m.obs[i].res`. It involves solving an unweighted NLS problem
 
 # Position arguments
 - `m`: A `WSVarLmmModel` object.
-- `solver`: NLP solver. Default is `IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)`.
+- `solver`: NLP solver. Default is `IpoptSolver(print_level=0, mehrotra_algorithm="yes", 
+    warm_start_init_point="yes", max_iter=100)`.
 
 # Keyword arguments
 - `init`: Initlizer for the NLS problem. Default is `init_ls!(m)`. If `init=m`, 
@@ -128,7 +129,8 @@ then it uses the values provided in `m.τ` and `m.Lγ` as starting point.
 """
 function init_mom!(
     m        :: WSVarLmmModel{T},
-    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100);
+    solver = Ipopt.IpoptSolver(print_level = 0, mehrotra_algorithm = "yes", 
+        warm_start_init_point = "yes", max_iter = 100);
     init     :: WSVarLmmModel = init_ls!(m),
     parallel :: Bool = false
     ) where T <: BlasReal
