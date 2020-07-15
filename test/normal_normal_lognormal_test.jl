@@ -61,7 +61,7 @@ for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
     Ipopt.IpoptSolver(print_level = 0, 
         mehrotra_algorithm = "yes", 
-        warm_start_init_point = "yes",
+        # warm_start_init_point = "yes",
         max_iter = 100), 
     # Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100),
     # Ipopt.IpoptSolver(print_level = 0)
@@ -86,6 +86,31 @@ for solver in [
     display(vlmm.Lγ); println()
     display(Lγ); println()
 
+    @info "unweighted obj/gradient/hessian at init_ls"
+    @show nlsv_obj!(vlmm, true, true, true)
+    # println("∇β")
+    # display(vlmm.∇β); println()
+    # println("∇τ")
+    # display(vlmm.∇τ); println()
+    # println("∇Lγ")
+    # display(vlmm.∇Lγ); println()
+    # println("Hββ")
+    # display(vlmm.Hββ); println()
+    # println("Hττ")
+    # display(vlmm.Hττ); println()
+    # println("HτLγ")
+    # display(vlmm.HτLγ); println()
+    # println("HLγLγ")
+    # display(vlmm.HLγLγ); println()
+    println("∇:")
+    ∇ = [vlmm.∇τ; vech(vlmm.∇Lγ)]
+    display(∇); println()
+    println("FIM:")
+    FIM = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
+    display(FIM); println()
+    @show eigvals(Symmetric(FIM))
+    @show Symmetric(FIM) \ ∇
+
     @info "init_mom!"
     @time init_mom!(vlmm, solver)
     println("β")
@@ -96,7 +121,35 @@ for solver in [
     display(vlmm.Lγ); println()
     display(Lγ); println()
 
-    @info "fitting"
+    @info "weighted obj/gradient/hessian at init_ls"
+    init_ls!(vlmm)
+    vlmm.iswtnls[1] = true
+    update_wtmat!(vlmm)
+    @show nlsv_obj!(vlmm, true, true, true)
+    # println("∇β")
+    # display(vlmm.∇β); println()
+    # println("∇τ")
+    # display(vlmm.∇τ); println()
+    # println("∇Lγ")
+    # display(vlmm.∇Lγ); println()
+    # println("Hββ")
+    # display(vlmm.Hββ); println()
+    # println("Hττ")
+    # display(vlmm.Hττ); println()
+    # println("HτLγ")
+    # display(vlmm.HτLγ); println()
+    # println("HLγLγ")
+    # display(vlmm.HLγLγ); println()
+    println("∇:")
+    ∇ = [vlmm.∇τ; vech(vlmm.∇Lγ)]
+    display(∇); println()
+    println("FIM:")
+    FIM = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
+    display(FIM); println()
+    @show eigvals(Symmetric(FIM))
+    @show Symmetric(FIM) \ ∇
+
+    @info "WNLS fitting"
     @time WiSER.fit!(vlmm, solver, runs=2)
     @info "obj at solution"
     @show nlsv_obj!(vlmm, true, true)

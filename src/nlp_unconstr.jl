@@ -8,7 +8,8 @@ Fit a `WSVarLMMModel` object using a weighted NLS method.
 # Positional arguments
 - `m::WSVarLmmModel`: Model to fit.
 - `solver`: Nonlinear programming solver to use. Common choices include:  
-    - `Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes",  warm_start_init_point="yes", max_iter=100)`.
+    - `Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100)`.
+    - `Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm="yes", warm_start_init_point="yes", max_iter=100)`.
     - `Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100)`.
     - `KNITRO.KnitroSolver(outlev=3)`. (Knitro is commercial software)
     - `NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000)`.  
@@ -29,8 +30,7 @@ Fit a `WSVarLMMModel` object using a weighted NLS method.
 """
 function fit!(
     m        :: WSVarLmmModel,
-    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", 
-        warm_start_init_point = "yes", max_iter=100);
+    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100);
     init     :: WSVarLmmModel = init_ls!(m),
     runs     :: Integer = 2,
     parallel :: Bool = false,
@@ -45,8 +45,9 @@ function fit!(
     # optimize weighted NLS
     m.iswtnls[1] = true
     m.ismthrd[1] = parallel
+    βprev, τprev, Lγprev = similar(m.β), similar(m.τ), similar(m.Lγ)
     for run in 1:runs
-        βprev, τprev, Lγprev = copy(m.β), copy(m.τ), copy(m.Lγ)
+        copyto!(βprev, m.β); copyto!(τprev, m.τ), copyto!(Lγprev, m.Lγ)
         tic = time() # start timing
         # update Vi, then β and residuals with WLS
         update_wtmat!(m)
