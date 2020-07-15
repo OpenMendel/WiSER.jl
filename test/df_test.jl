@@ -1,5 +1,5 @@
 module DFTest
-# Test for df.jl and varlmm_rand.jl functions
+# Test for df.jl and rand.jl functions
 using DataFrames, JuliaDB, LinearAlgebra, Random, Test, WiSER
 
 Random.seed!(123)

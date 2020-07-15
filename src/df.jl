@@ -53,7 +53,7 @@ Constructor of `WSVarLmmModel` from a `DataFrame` or `IndexedTable`.
 - `reformula`: formula for the mean random effects γ (variables in Z matrix).  
 - `wsvarformula`: formula for the within-subject variance effects τ (variables in W matrix). 
 - `idvar`: id variable for groupings. 
-- `datatable:` data table holding all of the data for the model. It can be a 
+- `tbl:` data table holding all of the data for the model. It can be a 
 `DataFrame` or column-based table such as an `IndexedTable` from JuliaDB. 
 
 # Keyword arguments
@@ -70,63 +70,60 @@ function WSVarLmmModel(
     reformula    :: FormulaTerm, 
     wsvarformula :: FormulaTerm, 
     idvar        :: Union{String, Symbol}, 
-    datatable;
+    tbl          :: Union{IndexedTable, DataFrame};
     wtvar        :: Union{String, Symbol} = ""
     )
     idvar = Symbol(idvar)
     function varlmmobs(tab)
-        tab = StatsModels.columntable(tab)
-        tab, _ = StatsModels.missing_omit(tab, alltermformula)
-
         y, X = modelcols(meanformula, tab)
         Z    = modelmatrix(reformula, tab)
         W    = modelmatrix(wsvarformula, tab)
         return WSVarLmmObs(y, X, Z, W)
     end
-    #for schema in missing values of y, otherwise it will dummy-encode.
-    ydict = Dict(Symbol(meanformula.lhs) => ContinuousTerm)
-
-    # apply df-wide schema
-    meanformula  = apply_schema(meanformula, schema(meanformula, datatable, ydict))
-    reformula    = apply_schema(reformula, schema(reformula, datatable, ydict))
-    wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable, ydict))
-
-    # collect all terms to perform missing_omit properly
+    isdf = typeof(tbl) <: DataFrame
+    datatable = isdf ? deepcopy(tbl) : DataFrame(tbl) #don't want to modify original df
+    # collect all terms to perform dropping properly
     alltermformula = meanformula.lhs ~ sum(term.(union(terms(meanformula.rhs),
       terms(reformula.rhs), terms(wsvarformula.rhs))))
-    alltermformula = apply_schema(alltermformula, schema(alltermformula, datatable, ydict))
 
+    # accumulate terms to keep in sub-df
+    dropsmissing = Symbol.(filter!(x -> x != term(1), terms(alltermformula)))
+    dropsmissing = isempty(string(wtvar)) ? [dropsmissing; idvar] :
+         [dropsmissing; Symbol.(wtvar); idvar]
+
+    # subset df and drop missing entries of used variables
+    datatable = datatable[!, dropsmissing]
+    dropmissing!(datatable, dropsmissing)
+
+    # apply df-wide schema
+    meanformula  = apply_schema(meanformula, schema(meanformula, datatable))#, ydict))
+    reformula    = apply_schema(reformula, schema(reformula, datatable))#, ydict))
+    wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable))#, ydict))
 
     # variable names
-    meanname  = StatsModels.coefnames(meanformula.rhs)
-    meanname  = ["β$i: " for i in 1:length(meanname)] .* meanname
-    rename    = StatsModels.coefnames(reformula.rhs)
-    rename    = ["γ$i: " for i in 1:length(rename)] .* rename
-    wsvarname = StatsModels.coefnames(wsvarformula.rhs)
-    wsvarname = ["τ$i: " for i in 1:length(wsvarname)] .* wsvarname
+    meannames = StatsModels.coefnames(meanformula.rhs)
+    # either array{Names} or string of one variable
+    meannames = typeof(meannames) <: Array ? ["β$i: " for i in 1:length(meannames)] .*
+        meannames : ["β1: " * meannames]
+    renames = StatsModels.coefnames(reformula.rhs)
+    renames = typeof(renames) <: Array ? ["γ$i: " for i in 1:length(renames)] .*
+        renames : ["γ1: " * renames]
+    wsvarnames = StatsModels.coefnames(wsvarformula.rhs)
+    wsvarnames = typeof(wsvarnames) <: Array ?  ["τ$i: " for i in 1:length(wsvarnames)] .*
+        wsvarnames : ["τ1: " * wsvarnames]
+
     if isempty(string(wtvar)) 
         wts = []
     else
-        cnames = colnames(table(datatable))
+        cnames = Symbol.(names(datatable))
         wtvar  = Symbol(wtvar)
         wtvar in cnames || 
             error("weight variable $wtvar not in datatable $datatable")
-        wts = JuliaDB.groupby((wts = wtvar => first, ),
-                table(datatable), idvar) |> 
-                x -> JuliaDB.select(x, :wts)
+        wts = combine(DataFrames.groupby(datatable, idvar), wtvar => first)[!, 2]
     end
-    # now form observations 
-    if typeof(datatable) <: IndexedTable
-        varlmm = JuliaDB.groupby(varlmmobs, datatable, idvar) |> 
-                x -> column(x, :varlmmobs) |> 
-                x -> WSVarLmmModel(x, meannames = meanname,
-                renames = rename, wsvarnames = wsvarname, obswts = wts)
-    else
-        varlmm = JuliaDB.groupby(varlmmobs, table(datatable), idvar) |> 
-                x -> column(x, :varlmmobs) |> 
-                x -> WSVarLmmModel(x, meannames = meanname,
-                renames = rename, wsvarnames = wsvarname, obswts = wts)
-    end
-
+    obsvec = combine(varlmmobs, DataFrames.groupby(datatable, idvar))[!, 2]
+    varlmm = WSVarLmmModel(obsvec, meannames = meannames, renames = renames,
+    wsvarnames = wsvarnames, obswts = wts)
+    datatable = nothing #get rid of memory when gc is called
     return varlmm
 end
