@@ -1,7 +1,7 @@
 module WiSER
 
 using DataFrames, JuliaDB, LinearAlgebra, MathProgBase
-using Permutations, Printf, Reexport, Statistics
+using Printf, Reexport, Statistics
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
@@ -387,7 +387,7 @@ end
 
 include("nls.jl")
 include("initialization.jl")
-include("nlp_unconstr.jl")
+include("fit.jl")
 include("df.jl")
 include("rand.jl")
 include("multivariate_calculus.jl")
