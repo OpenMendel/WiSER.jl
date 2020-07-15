@@ -145,8 +145,14 @@ function vech!(v::AbstractVector, A::AbstractVecOrMat)
 end
 
 function commutation(m::Integer, n::Integer)
-    A = reshape(1:(m * n), m, n)
-    Matrix(inv(Permutation(vec(A'))))
+    K = zeros(Int, m * n, m * n)
+    colK = 1
+    @inbounds for j in 1:n, i in 1:m
+        rowK          = n * (i - 1) + j
+        K[rowK, colK] = 1
+        colK         += 1
+    end
+    K
 end
 
 """
