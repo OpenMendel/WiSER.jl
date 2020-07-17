@@ -55,7 +55,7 @@ Output is an array of simulated responses that match the ordering in `Xs, Zs, Ws
     datatable, β::Vector, τ::Vector; respdist = MvNormal, Σγ=[], Σγω=[],
     respname::Symbol = :y)
 
-Generate a simulated response from the VarLMM model based on a datatable. 
+Generate a simulated response from the VarLMM model based on a DataFrame `datatable`. 
 Note: **the datatable MUST be ordered by grouping variable for it to generate in the correct order.
 This can be checked via `datatable == sort(datatable, idvar)`. The response is based on:
 
@@ -63,7 +63,7 @@ This can be checked via `datatable == sort(datatable, idvar)`. The response is b
 - `reformula`: represents the formula for the mean random effects γ (variables in Z matrix)
 - `wsvarformula`: represents the formula for the within-subject variance fixed effects τ (variables in W matrix)
 - `idvar`: the id variable for groupings.
-- `datatable`: the data table holding all of the data for the model. For this function it **must be in order**.
+- `datatable`: DataFrame for the model. For this function it **must be in order**.
 - `β`: mean fixed effects vector
 - `τ`: within-subject variance fixed effects vector
 - `respdist`: the distribution for response. Default is MvNormal. 
@@ -95,7 +95,7 @@ function rvarlmm(Xs::Array{Matrix{T}}, Zs::Array{Matrix{T}},
 
     γω = Vector{Float64}(undef, q + 1)
     z  = similar(γω)
-    y = map(i -> rvarlmm(Xs[i], Zs[i], Ws[i],  β, τ, Lγω, Lγ,
+    y = map(i -> rvarlmm(Xs[i], Zs[i], Ws[i], β, τ, Lγω, Lγ,
         lγω, γω, z, respdist),
         1:length(Xs))
     return y
@@ -103,7 +103,7 @@ end
 
 function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm, 
     wsvarformula::FormulaTerm, idvar::Union{Symbol, String},
-    datatable, β::Vector{T}, τ::Vector{T}; respdist = MvNormal, Σγ=[], Σγω=[],
+    datatable::DataFrame, β::Vector{T}, τ::Vector{T}; respdist = MvNormal, Σγ=[], Σγω=[],
     respname::Symbol = :y, kwargs...
     ) where T <: BlasReal
 
@@ -139,17 +139,21 @@ function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm,
     z  = similar(γω)
 
     # Need sortperm of groupby var... 
-    if typeof(datatable) <: IndexedTable
-        y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
-            x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), datatable, idvar) |> 
-            x -> column(x, 2) |> x -> vcat(x...) 
-        datatable = JuliaDB.transform(datatable, respname => y)
-    else
-        y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
-            x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), table(datatable), idvar) |> 
-            x -> column(x, 2) |> x -> vcat(x...)
-        datatable[!, respname] = y
-    end
+    # if typeof(datatable) <: IndexedTable
+    #     y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
+    #         x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), datatable, idvar) |> 
+    #         x -> column(x, 2) |> x -> vcat(x...) 
+    #     datatable = JuliaDB.transform(datatable, respname => y)
+    # else
+    #     y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
+    #         x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), table(datatable), idvar) |> 
+    #         x -> column(x, 2) |> x -> vcat(x...)
+    y = combine(x -> rvarlmmob(meanformula, reformula, wsvarformula,
+        x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...),
+        groupby(datatable, idvar)) |>
+        x -> x[!, 2]
+    datatable[!, respname] = y
+    # end
     return datatable
 end
 

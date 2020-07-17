@@ -69,6 +69,7 @@ function fit!(
             optstat,
             toc - tic)
     end
+    m.isfitted[1] = true
     # refresh objective, gradient, and Hessian
     mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
     nlsv_obj!(m, true, true, false)

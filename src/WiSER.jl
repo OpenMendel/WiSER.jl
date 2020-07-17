@@ -1,6 +1,6 @@
 module WiSER
 
-using DataFrames, JuliaDB, LinearAlgebra, MathProgBase
+using DataFrames, Tables, LinearAlgebra, MathProgBase
 using Printf, Reexport, Statistics
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
@@ -266,6 +266,8 @@ struct WSVarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     iswtnls    :: Vector{Bool}
     # multi-threading or not
     ismthrd    :: Vector{Bool}
+    # model has been fit or not
+    isfitted   :: Vector{Bool}
     # for sandwich estimator
     ψ          :: Vector{T}
     Ainv       :: Matrix{T}
@@ -313,29 +315,31 @@ function WSVarLmmModel(
     copytri!(  ztz2, 'U')
     copytri!(ztz2od, 'U')
     # parameters
-    β       = Vector{T}(undef, p)
-    τ       = Vector{T}(undef, l)
-    Lγ      = Matrix{T}(undef, q, q)
-    Σγ      = Matrix{T}(undef, q, q)
+    β        = Vector{T}(undef, p)
+    τ        = Vector{T}(undef, l)
+    Lγ       = Matrix{T}(undef, q, q)
+    Σγ       = Matrix{T}(undef, q, q)
     # gradients
-    ∇β      = Vector{T}(undef, p)
-    ∇τ      = Vector{T}(undef, l)
-    ∇Lγ     = Matrix{T}(undef, q, q)
-    ∇Σγ     = Vector{T}(undef, abs2(q))
-    Hββ     = Matrix{T}(undef, p, p)
-    Hττ     = Matrix{T}(undef, l, l)
-    HτLγ    = Matrix{T}(undef, l, q◺)
-    HLγLγ   = Matrix{T}(undef, q◺, q◺)
-    HΣγΣγ   = Matrix{T}(undef, abs2(q), abs2(q))
+    ∇β       = Vector{T}(undef, p)
+    ∇τ       = Vector{T}(undef, l)
+    ∇Lγ      = Matrix{T}(undef, q, q)
+    ∇Σγ      = Vector{T}(undef, abs2(q))
+    Hββ      = Matrix{T}(undef, p, p)
+    Hττ      = Matrix{T}(undef, l, l)
+    HτLγ     = Matrix{T}(undef, l, q◺)
+    HLγLγ    = Matrix{T}(undef, q◺, q◺)
+    HΣγΣγ    = Matrix{T}(undef, abs2(q), abs2(q))
     # weighted NLS fitting or not
     iswtnls = [false]
     # multi-threading or not
-    ismthrd = [false]
+    ismthrd  = [false]
+    # has been fit or not 
+    isfitted = [false]
     # sandwich estimator
-    ψ       = Vector{T}(undef, p + q◺ + l)
-    Ainv    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
-    B       = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
-    vcov    = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    ψ        = Vector{T}(undef, p + q◺ + l)
+    Ainv     = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    B        = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
+    vcov     = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     # constructor
     WSVarLmmModel{T}(
         obsvec, meannames, renames, wsvarnames, obswts,
@@ -344,7 +348,7 @@ function WSVarLmmModel(
         β,  τ,  Lγ, Σγ,
         ∇β, ∇τ, ∇Lγ, ∇Σγ,
         Hββ, Hττ, HτLγ, HLγLγ, HΣγΣγ,
-        iswtnls, ismthrd,
+        iswtnls, ismthrd, isfitted, 
         ψ, Ainv, B, vcov)
 end
 
@@ -370,6 +374,10 @@ function coeftable(m::WSVarLmmModel)
 end
 
 function Base.show(io::IO, m::WSVarLmmModel)
+    if !m.isfitted[1]
+        @warn("The model has not been fit.")
+        return nothing
+    end
     println(io)
     println(io, "Within-subject variance estimation by robust regression (WiSER)")
     #println(io, " ", m.formula)

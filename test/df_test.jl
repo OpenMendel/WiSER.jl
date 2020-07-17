@@ -42,13 +42,8 @@ end
 @testset "Simulating Response" begin
     @test rvarlmm!(f1, f2, f3, :id, df, β, τ;
         Σγ = Σγ, respname = :response)[1, :response] ≈ -0.356588825151
-    global t
-    t = rvarlmm!(f1, f2, f3, :id, t, β, τ;
-        Σγ = Σγ, respname = :response)
-    @test t[1].response ≈ -0.2840619552
-    @test rvarlmm(Xs, Zs, Ws, β, τ; Σγ = Σγ)[1][1] ≈ 0.4852541787188
-    @test string(:response) in names(df)
-    @test :response in colnames(t)
+    @test rvarlmm(Xs, Zs, Ws, β, τ; Σγ = Σγ)[1][1] ≈ -0.45463680756290314
+    @test "response" in names(df)
 
     vlma.β .= 0
     vlma.τ .= 0

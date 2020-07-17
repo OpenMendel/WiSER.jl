@@ -65,41 +65,52 @@ vlmm3 = WSVarLmmModel(@formula(y ~ 1 + x2 + x3 + x4 + x5),
     @formula(y ~ 1 + z2 + z3), @formula(y ~ 1 + w2 + w3 + w4 + w5), "id", df)
 ```
 """
+WSVarLmmModel(
+    meanformula  :: FormulaTerm, 
+    reformula    :: FormulaTerm, 
+    wsvarformula :: FormulaTerm, 
+    idvar        :: Union{String, Symbol}, 
+    tbl;
+    wtvar        :: Union{String, Symbol} = ""
+    ) = WSVarLmmModel(meanformula, reformula, wsvarformula,
+     idvar, columntable(tbl); wtvar = wtvar)
+    
 function WSVarLmmModel(
     meanformula  :: FormulaTerm, 
     reformula    :: FormulaTerm, 
     wsvarformula :: FormulaTerm, 
     idvar        :: Union{String, Symbol}, 
-    tbl          :: Union{IndexedTable, DataFrame};
+    tbl          :: T;
     wtvar        :: Union{String, Symbol} = ""
-    )
+    ) where T <: Tables.ColumnTable
+
     idvar = Symbol(idvar)
+    iswtvar = !isempty(string(wtvar))
+
     function varlmmobs(tab)
         y, X = modelcols(meanformula, tab)
         Z    = modelmatrix(reformula, tab)
         W    = modelmatrix(wsvarformula, tab)
         return WSVarLmmObs(y, X, Z, W)
     end
-    isdf = typeof(tbl) <: DataFrame
-    datatable = isdf ? deepcopy(tbl) : DataFrame(tbl) #don't want to modify original df
+    
     # collect all terms to perform dropping properly
-    alltermformula = meanformula.lhs ~ sum(term.(union(terms(meanformula.rhs),
-      terms(reformula.rhs), terms(wsvarformula.rhs))))
+    if iswtvar
+        alltermformula = meanformula.lhs ~ sum(term.(union(terms(meanformula.rhs),
+            terms(reformula.rhs), terms(wsvarformula.rhs)))) + 
+            term(idvar) + term(Symbol(wtvar))
+    else
+        alltermformula = meanformula.lhs ~ sum(term.(union(terms(meanformula.rhs),
+          terms(reformula.rhs), terms(wsvarformula.rhs)))) + term(idvar)
+    end
 
-    # accumulate terms to keep in sub-df
-    dropsmissing = Symbol.(filter!(x -> x != term(1), terms(alltermformula)))
-    dropsmissing = isempty(string(wtvar)) ? [dropsmissing; idvar] :
-         [dropsmissing; Symbol.(wtvar); idvar]
-
-    # subset df and drop missing entries of used variables
-    datatable = datatable[!, dropsmissing]
-    dropmissing!(datatable, dropsmissing)
+    tbl, _ = StatsModels.missing_omit(tbl, alltermformula)
 
     # apply df-wide schema
-    meanformula  = apply_schema(meanformula, schema(meanformula, datatable))#, ydict))
-    reformula    = apply_schema(reformula, schema(reformula, datatable))#, ydict))
-    wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, datatable))#, ydict))
-
+    meanformula  = apply_schema(meanformula, schema(meanformula, tbl))#, ydict))
+    reformula    = apply_schema(reformula, schema(reformula, tbl))#, ydict))
+    wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, tbl))#, ydict))
+    
     # variable names
     meannames = StatsModels.coefnames(meanformula.rhs)
     # either array{Names} or string of one variable
@@ -115,15 +126,14 @@ function WSVarLmmModel(
     if isempty(string(wtvar)) 
         wts = []
     else
-        cnames = Symbol.(names(datatable))
+        cnames = Tables.columnnames(tbl)
         wtvar  = Symbol(wtvar)
         wtvar in cnames || 
             error("weight variable $wtvar not in datatable $datatable")
-        wts = combine(DataFrames.groupby(datatable, idvar), wtvar => first)[!, 2]
+        wts = combine(DataFrames.groupby(DataFrame!(tbl), idvar), wtvar => first)[!, 2]
     end
-    obsvec = combine(varlmmobs, DataFrames.groupby(datatable, idvar))[!, 2]
+    obsvec = combine(varlmmobs, DataFrames.groupby(DataFrame!(tbl), idvar))[!, 2]
     varlmm = WSVarLmmModel(obsvec, meannames = meannames, renames = renames,
     wsvarnames = wsvarnames, obswts = wts)
-    datatable = nothing #get rid of memory when gc is called
     return varlmm
 end
