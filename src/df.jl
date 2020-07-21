@@ -129,7 +129,7 @@ function WSVarLmmModel(
         cnames = Tables.columnnames(tbl)
         wtvar  = Symbol(wtvar)
         wtvar in cnames || 
-            error("weight variable $wtvar not in datatable $datatable")
+            error("weight variable $wtvar not in datatable $tbl")
         wts = combine(DataFrames.groupby(DataFrame!(tbl), idvar), wtvar => first)[!, 2]
     end
     obsvec = combine(varlmmobs, DataFrames.groupby(DataFrame!(tbl), idvar))[!, 2]
