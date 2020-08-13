@@ -173,10 +173,10 @@ function nlsv_obj!(
     end
     @inbounds @simd for j in 1:n
         obs.obj[1] += (-2 * abs2(obs.Dinv_r[j]) #3
-            + 4 * obs.rt_UUt[j] * obs.Dinv_r[j]  #4 + #8
-            - 2 * abs2(obs.rt_UUt[j]) # 9 
-            + abs2(obs.Dinv[j]) * obs.expwτ[j] #12 
-            - 2 * obs.diagUUt_Dinv[j] * obs.expwτ[j]) * obs.expwτ[j] #13
+            + 4 * obs.rt_UUt[j] * obs.Dinv_r[j]  #4
+            - 2 * abs2(obs.rt_UUt[j]) # 8
+            + abs2(obs.Dinv[j]) * obs.expwτ[j] #11 
+            - 2 * obs.diagUUt_Dinv[j] * obs.expwτ[j]) * obs.expwτ[j] #12
     end 
     if needgrad 
         @inbounds @simd for j in 1:n
@@ -189,10 +189,10 @@ function nlsv_obj!(
     end
     @inbounds for j in 1:q  #j-i looping for memory access 
         for i in 1:n
-            obs.obj[1] += 2 * (abs2(obs.Dinv_Z_L[i, j]) # 14
-                - obs.UUt_Z_L[i, j] * obs.Dinv_Z_L[i, j] # 15
-                - obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] # 17
-                + abs2(obs.UUt_Z_L[i, j])) * obs.expwτ[i]# 18
+            obs.obj[1] += 2 * (abs2(obs.Dinv_Z_L[i, j]) # 13
+                - obs.UUt_Z_L[i, j] * obs.Dinv_Z_L[i, j] # 14
+                - obs.Dinv_Z_L[i, j] * obs.UUt_Z_L[i, j] # 16
+                + abs2(obs.UUt_Z_L[i, j])) * obs.expwτ[i]# 17
         end
     end
     if needgrad 
@@ -207,22 +207,22 @@ function nlsv_obj!(
     #obs.storage_qq = L' * Z' * UU' * rr' * Dinv * Z * L
     copyto!(obs.storage_qq, obs.Zt_UUt_rrt_Dinv_Z)
     BLAS.trmm!('L', 'L', 'T', 'N', one(T), Lγ, obs.storage_qq)
-    BLAS.trmm!('R', 'L', 'N', 'N', one(T), Lγ, obs.storage_qq) #for #10
+    BLAS.trmm!('R', 'L', 'N', 'N', one(T), Lγ, obs.storage_qq) #for #9
     #use ∇Lγ as temporary storage 
     #obs.∇Lγ = L' Zt_UUt_rrt_UUt_Z * L
     copyto!(obs.∇Lγ, obs.Zt_UUt_rrt_UUt_Z)
     BLAS.trmm!('L', 'L', 'T', 'N', T(1), Lγ, obs.∇Lγ)
-    BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.∇Lγ) #for #11
+    BLAS.trmm!('R', 'L', 'N', 'N', T(1), Lγ, obs.∇Lγ) #for #10
     @inbounds for j in 1:q
         obs.obj[1] -= 2 * abs2(obs.Lt_Zt_Dinv_r[j]) #5
-        obs.obj[1] += 2 * obs.storage_qq[j, j] #10 
-        obs.obj[1] -= 2 * obs.∇Lγ[j, j] # 11
+        obs.obj[1] += 2 * obs.storage_qq[j, j] #9
+        obs.obj[1] -= 2 * obs.∇Lγ[j, j] # 10
         for i in 1:q
-            obs.obj[1] += obs.Ut_D_U[i, j]^2 #16
+            obs.obj[1] += obs.Ut_D_U[i, j]^2 #15
             obs.obj[1] += 2 * obs.rt_UUt_Z[i] * Lγ[i, j] * obs.Lt_Zt_Dinv_r[j] #6
-            obs.obj[1] += abs2(obs.Lt_Zt_Dinv_Z_L[i, j]) #19 
-            obs.obj[1] -= 2 * obs.Lt_Zt_Dinv_Z_L[i, j] * obs.Lt_Zt_UUt_Z_L[i,j] #20
-            obs.obj[1] += abs2(obs.Lt_Zt_UUt_Z_L[i, j]) #21 
+            obs.obj[1] += abs2(obs.Lt_Zt_Dinv_Z_L[i, j]) #18 
+            obs.obj[1] -= 2 * obs.Lt_Zt_Dinv_Z_L[i, j] * obs.Lt_Zt_UUt_Z_L[i,j] #19
+            obs.obj[1] += abs2(obs.Lt_Zt_UUt_Z_L[i, j]) #20
         end
     end
     obs.obj[1] *= (1//2)
