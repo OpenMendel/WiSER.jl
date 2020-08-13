@@ -5,6 +5,7 @@ module MvtGammaInvgammaTest
 using Distributions, InteractiveUtils, LinearAlgebra
 using Random, Roots, SpecialFunctions, Test, WiSER
 
+@info "MvT Gamma InvGamma Test"
 @info "generate data"
 Random.seed!(123)
 # dimensions
@@ -82,7 +83,7 @@ for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
     Ipopt.IpoptSolver(print_level = 5, 
         mehrotra_algorithm = "yes", 
-        # warm_start_init_point = "yes",
+        warm_start_init_point = "yes",
         max_iter=100),
     # Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100),
     # Ipopt.IpoptSolver(print_level = 0)
@@ -123,14 +124,14 @@ for solver in [
     # display(vlmm.HτLγ); println()
     # println("HLγLγ")
     # display(vlmm.HLγLγ); println()
-    println("∇:")
-    ∇ = [vlmm.∇τ; vech(vlmm.∇Lγ)]
-    display(∇); println()
-    println("FIM:")
-    FIM = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
-    display(FIM); println()
-    @show eigvals(Symmetric(FIM))
-    @show Symmetric(FIM) \ ∇
+    # println("∇:")
+    # ∇ = [vlmm.∇τ; vech(vlmm.∇Lγ)]
+    # display(∇); println()
+    # println("FIM:")
+    # FIM = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
+    # display(FIM); println()
+    # @show eigvals(Symmetric(FIM))
+    # @show Symmetric(FIM) \ ∇
 
     @info "init_mom!"
     @time init_mom!(vlmm, solver)
@@ -164,11 +165,11 @@ for solver in [
     println("∇:")
     ∇ = [vlmm.∇τ; vech(vlmm.∇Lγ)]
     display(∇); println()
-    println("FIM:")
-    FIM = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
-    display(FIM); println()
-    @show eigvals(Symmetric(FIM))
-    @show Symmetric(FIM) \ ∇
+    # println("FIM:")
+    # FIM = [vlmm.Hττ vlmm.HτLγ; vlmm.HτLγ' vlmm.HLγLγ]
+    # display(FIM); println()
+    # @show eigvals(Symmetric(FIM))
+    # @show Symmetric(FIM) \ ∇
 
     @info "WNLS fitting"
     @time WiSER.fit!(vlmm, solver, runs=2) # start from init_ls by default

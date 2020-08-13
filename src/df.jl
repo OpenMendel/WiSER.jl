@@ -44,9 +44,9 @@ end
 
 """
     WSVarLmmModel(meanformula::FormulaTerm, reformula::FormulaTerm, 
-    wsvarformula::FormulaTerm, idvar::Union{String, Symbol}, datatable)
+    wsvarformula::FormulaTerm, idvar::Union{String, Symbol}, tbl)
 
-Constructor of `WSVarLmmModel` from a `DataFrame` or `IndexedTable`. 
+Constructor of `WSVarLmmModel` from a Tables.jl compatible source. 
 
 # Positional arguments  
 - `meanformula`: formula for the mean fixed effects β (variables in X matrix).  

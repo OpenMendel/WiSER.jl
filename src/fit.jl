@@ -30,7 +30,8 @@ Fit a `WSVarLMMModel` object using a weighted NLS method.
 """
 function fit!(
     m        :: WSVarLmmModel,
-    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes", max_iter=100);
+    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes",
+    warm_start_init_point="yes", max_iter=100);
     init     :: WSVarLmmModel = init_ls!(m),
     runs     :: Integer = 2,
     parallel :: Bool = false,
