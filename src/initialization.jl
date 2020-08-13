@@ -130,7 +130,8 @@ then it uses the values provided in `m.τ` and `m.Lγ` as starting point.
 function init_mom!(
     m        :: WSVarLmmModel{T},
     solver = Ipopt.IpoptSolver(print_level = 0, mehrotra_algorithm = "yes", 
-        warm_start_init_point = "yes", max_iter = 100);
+        warm_start_init_point = "yes",
+        warm_start_bound_push = 1e-6, max_iter = 100);
     init     :: WSVarLmmModel = init_ls!(m),
     parallel :: Bool = false
     ) where T <: BlasReal
