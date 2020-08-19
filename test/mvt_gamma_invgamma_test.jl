@@ -7,7 +7,7 @@ using Random, Roots, SpecialFunctions, Test, WiSER
 
 @info "MvT Gamma InvGamma Test"
 @info "generate data"
-Random.seed!(123)
+Random.seed!(1234)
 # dimensions
 m  = 1000 # number of individuals
 ns = rand(20:20, m) # numbers of observations per individual
