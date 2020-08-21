@@ -326,30 +326,32 @@ function nlsv_obj!(
             nlsv_obj!(obs, m.β, m.τ, m.Lγ, Val(m.iswtnls[1]),
                 needgrad, needhess, updateres)
         end
-        for obs in m.data
-            obj += obs.obj[1]
+        for obs in 1:length(m.data)
+            wtobs = isempty(m.obswts) ? one(T) : T(m.obswts[obs])
+            obj += wtobs * m.data[obs].obj[1]
             if needgrad
-                BLAS.axpy!(T(1), obs.∇τ   , m.∇τ )
-                BLAS.axpy!(T(1), obs.∇Lγ  , m.∇Lγ)
+                BLAS.axpy!(wtobs, m.data[obs].∇τ   , m.∇τ )
+                BLAS.axpy!(wtobs, m.data[obs].∇Lγ  , m.∇Lγ)
             end
             if needhess
-                BLAS.axpy!(T(1), obs.Hττ  , m.Hττ  )
-                BLAS.axpy!(T(1), obs.HτLγ , m.HτLγ )
-                BLAS.axpy!(T(1), obs.HLγLγ, m.HLγLγ)
+                BLAS.axpy!(wtobs, m.data[obs].Hττ  , m.Hττ  )
+                BLAS.axpy!(wtobs, m.data[obs].HτLγ , m.HτLγ )
+                BLAS.axpy!(wtobs, m.data[obs].HLγLγ, m.HLγLγ)
             end
         end
     else
-        for obs in m.data
-            obj += nlsv_obj!(obs, m.β, m.τ, m.Lγ, Val(m.iswtnls[1]),
-                needgrad, needhess, updateres)
+        for obs in 1:length(m.data)
+            wtobs = isempty(m.obswts) ? one(T) : T(m.obswts[obs])
+            obj += wtobs * nlsv_obj!(m.data[obs], m.β, m.τ, m.Lγ,
+                Val(m.iswtnls[1]), needgrad, needhess, updateres)
             if needgrad
-                BLAS.axpy!(T(1), obs.∇τ   , m.∇τ )
-                BLAS.axpy!(T(1), obs.∇Lγ  , m.∇Lγ)
+                BLAS.axpy!(wtobs, m.data[obs].∇τ   , m.∇τ )
+                BLAS.axpy!(wtobs, m.data[obs].∇Lγ  , m.∇Lγ)
             end
             if needhess
-                BLAS.axpy!(T(1), obs.Hττ  , m.Hττ  )
-                BLAS.axpy!(T(1), obs.HτLγ , m.HτLγ )
-                BLAS.axpy!(T(1), obs.HLγLγ, m.HLγLγ)
+                BLAS.axpy!(wtobs, m.data[obs].Hττ  , m.Hττ  )
+                BLAS.axpy!(wtobs, m.data[obs].HτLγ , m.HτLγ )
+                BLAS.axpy!(wtobs, m.data[obs].HLγLγ, m.HLγLγ)
             end
         end
     end

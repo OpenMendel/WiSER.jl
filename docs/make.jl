@@ -7,7 +7,9 @@ makedocs(
     clean = true,
     debug = true,
     pages = [
-        "index.md"
+        "index.md",
+        "model_fitting.md",
+        "simulation.md"
     ]
 )
 
