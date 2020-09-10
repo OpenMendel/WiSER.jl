@@ -9,6 +9,10 @@ Here we cover model construction and parameter estimation using WiSER.
 using CSV, DataFrames, WiSER
 ```
 
+    ┌ Info: Precompiling WiSER [2ff19380-1883-49fc-9d10-450face6b90c]
+    └ @ Base loading.jl:1260
+
+
 ## Example data
 
 The example dataset, `sbp.csv`, is contained in `data` folder of the package. It is a simulated datatset with 500 individuals, each having 9~11 observations. The outcome, systolic blood pressure (SBP), is a function of other covariates. Below we read in the data as a `DataFrame` using the [CSV package](https://juliadata.github.io/CSV.jl). WiSER.jl can take other data table objects that comply with the `Tables.jl` format, such as `IndexedTables` from the [JuliaDB](https://github.com/JuliaData/JuliaDB.jl) package.
@@ -22,7 +26,7 @@ df = DataFrame!(CSV.File(filepath * "sbp.csv"))
 
 
 
-<table class="data-frame"><thead><tr><th></th><th>id</th><th>sbp</th><th>agegroup</th><th>gender</th><th>bmi</th><th>meds</th><th>bmi_std</th></tr><tr><th></th><th>Int64</th><th>Float64</th><th>Float64</th><th>String</th><th>Float64</th><th>String</th><th>Float64</th></tr></thead><tbody><p>5,011 rows × 7 columns</p><tr><th>1</th><td>1</td><td>159.586</td><td>3.0</td><td>Male</td><td>23.1336</td><td>NoMeds</td><td>-1.57733</td></tr><tr><th>2</th><td>1</td><td>161.849</td><td>3.0</td><td>Male</td><td>26.5885</td><td>NoMeds</td><td>1.29927</td></tr><tr><th>3</th><td>1</td><td>160.484</td><td>3.0</td><td>Male</td><td>24.8428</td><td>NoMeds</td><td>-0.154204</td></tr><tr><th>4</th><td>1</td><td>161.134</td><td>3.0</td><td>Male</td><td>24.9289</td><td>NoMeds</td><td>-0.0825105</td></tr><tr><th>5</th><td>1</td><td>165.443</td><td>3.0</td><td>Male</td><td>24.8057</td><td>NoMeds</td><td>-0.185105</td></tr><tr><th>6</th><td>1</td><td>160.053</td><td>3.0</td><td>Male</td><td>24.1583</td><td>NoMeds</td><td>-0.72415</td></tr><tr><th>7</th><td>1</td><td>162.1</td><td>3.0</td><td>Male</td><td>25.2543</td><td>NoMeds</td><td>0.188379</td></tr><tr><th>8</th><td>1</td><td>163.153</td><td>3.0</td><td>Male</td><td>24.3951</td><td>NoMeds</td><td>-0.527037</td></tr><tr><th>9</th><td>1</td><td>166.675</td><td>3.0</td><td>Male</td><td>26.1514</td><td>NoMeds</td><td>0.935336</td></tr><tr><th>10</th><td>2</td><td>130.765</td><td>1.0</td><td>Male</td><td>22.6263</td><td>NoMeds</td><td>-1.99977</td></tr><tr><th>11</th><td>2</td><td>131.044</td><td>1.0</td><td>Male</td><td>24.7404</td><td>NoMeds</td><td>-0.239477</td></tr><tr><th>12</th><td>2</td><td>131.22</td><td>1.0</td><td>Male</td><td>25.3415</td><td>NoMeds</td><td>0.260949</td></tr><tr><th>13</th><td>2</td><td>131.96</td><td>1.0</td><td>Male</td><td>25.6933</td><td>NoMeds</td><td>0.553886</td></tr><tr><th>14</th><td>2</td><td>130.09</td><td>1.0</td><td>Male</td><td>21.7646</td><td>NoMeds</td><td>-2.71724</td></tr><tr><th>15</th><td>2</td><td>130.556</td><td>1.0</td><td>Male</td><td>23.7895</td><td>NoMeds</td><td>-1.03123</td></tr><tr><th>16</th><td>2</td><td>132.001</td><td>1.0</td><td>Male</td><td>26.9103</td><td>NoMeds</td><td>1.56716</td></tr><tr><th>17</th><td>2</td><td>131.879</td><td>1.0</td><td>Male</td><td>24.1153</td><td>NoMeds</td><td>-0.759929</td></tr><tr><th>18</th><td>2</td><td>131.609</td><td>1.0</td><td>Male</td><td>25.3372</td><td>NoMeds</td><td>0.257432</td></tr><tr><th>19</th><td>2</td><td>132.149</td><td>1.0</td><td>Male</td><td>23.7171</td><td>NoMeds</td><td>-1.09154</td></tr><tr><th>20</th><td>2</td><td>130.653</td><td>1.0</td><td>Male</td><td>25.5947</td><td>NoMeds</td><td>0.471793</td></tr><tr><th>21</th><td>3</td><td>145.655</td><td>2.0</td><td>Male</td><td>25.3645</td><td>NoMeds</td><td>0.280102</td></tr><tr><th>22</th><td>3</td><td>147.384</td><td>2.0</td><td>Male</td><td>26.6756</td><td>NoMeds</td><td>1.37179</td></tr><tr><th>23</th><td>3</td><td>146.558</td><td>2.0</td><td>Male</td><td>25.6001</td><td>NoMeds</td><td>0.476309</td></tr><tr><th>24</th><td>3</td><td>146.731</td><td>2.0</td><td>Male</td><td>26.3532</td><td>NoMeds</td><td>1.10337</td></tr><tr><th>25</th><td>3</td><td>143.037</td><td>2.0</td><td>Male</td><td>24.4092</td><td>NoMeds</td><td>-0.515285</td></tr><tr><th>26</th><td>3</td><td>144.845</td><td>2.0</td><td>Male</td><td>25.1193</td><td>NoMeds</td><td>0.075975</td></tr><tr><th>27</th><td>3</td><td>145.366</td><td>2.0</td><td>Male</td><td>25.5029</td><td>NoMeds</td><td>0.395354</td></tr><tr><th>28</th><td>3</td><td>145.506</td><td>2.0</td><td>Male</td><td>25.9668</td><td>NoMeds</td><td>0.781658</td></tr><tr><th>29</th><td>3</td><td>143.155</td><td>2.0</td><td>Male</td><td>24.9327</td><td>NoMeds</td><td>-0.0793522</td></tr><tr><th>30</th><td>3</td><td>146.147</td><td>2.0</td><td>Male</td><td>25.0029</td><td>NoMeds</td><td>-0.020953</td></tr><tr><th>&vellip;</th><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td></tr></tbody></table>
+<table class="data-frame"><thead><tr><th></th><th>id</th><th>sbp</th><th>agegroup</th><th>gender</th><th>bmi</th><th>meds</th><th>bmi_std</th><th>obswt</th></tr><tr><th></th><th>Int64</th><th>Float64</th><th>Float64</th><th>String</th><th>Float64</th><th>String</th><th>Float64</th><th>Float64</th></tr></thead><tbody><p>5,011 rows × 8 columns</p><tr><th>1</th><td>1</td><td>159.586</td><td>3.0</td><td>Male</td><td>23.1336</td><td>NoMeds</td><td>-1.57733</td><td>4.0</td></tr><tr><th>2</th><td>1</td><td>161.849</td><td>3.0</td><td>Male</td><td>26.5885</td><td>NoMeds</td><td>1.29927</td><td>4.0</td></tr><tr><th>3</th><td>1</td><td>160.484</td><td>3.0</td><td>Male</td><td>24.8428</td><td>NoMeds</td><td>-0.154204</td><td>4.0</td></tr><tr><th>4</th><td>1</td><td>161.134</td><td>3.0</td><td>Male</td><td>24.9289</td><td>NoMeds</td><td>-0.0825105</td><td>4.0</td></tr><tr><th>5</th><td>1</td><td>165.443</td><td>3.0</td><td>Male</td><td>24.8057</td><td>NoMeds</td><td>-0.185105</td><td>4.0</td></tr><tr><th>6</th><td>1</td><td>160.053</td><td>3.0</td><td>Male</td><td>24.1583</td><td>NoMeds</td><td>-0.72415</td><td>4.0</td></tr><tr><th>7</th><td>1</td><td>162.1</td><td>3.0</td><td>Male</td><td>25.2543</td><td>NoMeds</td><td>0.188379</td><td>4.0</td></tr><tr><th>8</th><td>1</td><td>163.153</td><td>3.0</td><td>Male</td><td>24.3951</td><td>NoMeds</td><td>-0.527037</td><td>4.0</td></tr><tr><th>9</th><td>1</td><td>166.675</td><td>3.0</td><td>Male</td><td>26.1514</td><td>NoMeds</td><td>0.935336</td><td>4.0</td></tr><tr><th>10</th><td>2</td><td>130.765</td><td>1.0</td><td>Male</td><td>22.6263</td><td>NoMeds</td><td>-1.99977</td><td>3.0</td></tr><tr><th>11</th><td>2</td><td>131.044</td><td>1.0</td><td>Male</td><td>24.7404</td><td>NoMeds</td><td>-0.239477</td><td>3.0</td></tr><tr><th>12</th><td>2</td><td>131.22</td><td>1.0</td><td>Male</td><td>25.3415</td><td>NoMeds</td><td>0.260949</td><td>3.0</td></tr><tr><th>13</th><td>2</td><td>131.96</td><td>1.0</td><td>Male</td><td>25.6933</td><td>NoMeds</td><td>0.553886</td><td>3.0</td></tr><tr><th>14</th><td>2</td><td>130.09</td><td>1.0</td><td>Male</td><td>21.7646</td><td>NoMeds</td><td>-2.71724</td><td>3.0</td></tr><tr><th>15</th><td>2</td><td>130.556</td><td>1.0</td><td>Male</td><td>23.7895</td><td>NoMeds</td><td>-1.03123</td><td>3.0</td></tr><tr><th>16</th><td>2</td><td>132.001</td><td>1.0</td><td>Male</td><td>26.9103</td><td>NoMeds</td><td>1.56716</td><td>3.0</td></tr><tr><th>17</th><td>2</td><td>131.879</td><td>1.0</td><td>Male</td><td>24.1153</td><td>NoMeds</td><td>-0.759929</td><td>3.0</td></tr><tr><th>18</th><td>2</td><td>131.609</td><td>1.0</td><td>Male</td><td>25.3372</td><td>NoMeds</td><td>0.257432</td><td>3.0</td></tr><tr><th>19</th><td>2</td><td>132.149</td><td>1.0</td><td>Male</td><td>23.7171</td><td>NoMeds</td><td>-1.09154</td><td>3.0</td></tr><tr><th>20</th><td>2</td><td>130.653</td><td>1.0</td><td>Male</td><td>25.5947</td><td>NoMeds</td><td>0.471793</td><td>3.0</td></tr><tr><th>21</th><td>3</td><td>145.655</td><td>2.0</td><td>Male</td><td>25.3645</td><td>NoMeds</td><td>0.280102</td><td>4.0</td></tr><tr><th>22</th><td>3</td><td>147.384</td><td>2.0</td><td>Male</td><td>26.6756</td><td>NoMeds</td><td>1.37179</td><td>4.0</td></tr><tr><th>23</th><td>3</td><td>146.558</td><td>2.0</td><td>Male</td><td>25.6001</td><td>NoMeds</td><td>0.476309</td><td>4.0</td></tr><tr><th>24</th><td>3</td><td>146.731</td><td>2.0</td><td>Male</td><td>26.3532</td><td>NoMeds</td><td>1.10337</td><td>4.0</td></tr><tr><th>25</th><td>3</td><td>143.037</td><td>2.0</td><td>Male</td><td>24.4092</td><td>NoMeds</td><td>-0.515285</td><td>4.0</td></tr><tr><th>26</th><td>3</td><td>144.845</td><td>2.0</td><td>Male</td><td>25.1193</td><td>NoMeds</td><td>0.075975</td><td>4.0</td></tr><tr><th>27</th><td>3</td><td>145.366</td><td>2.0</td><td>Male</td><td>25.5029</td><td>NoMeds</td><td>0.395354</td><td>4.0</td></tr><tr><th>28</th><td>3</td><td>145.506</td><td>2.0</td><td>Male</td><td>25.9668</td><td>NoMeds</td><td>0.781658</td><td>4.0</td></tr><tr><th>29</th><td>3</td><td>143.155</td><td>2.0</td><td>Male</td><td>24.9327</td><td>NoMeds</td><td>-0.0793522</td><td>4.0</td></tr><tr><th>30</th><td>3</td><td>146.147</td><td>2.0</td><td>Male</td><td>25.0029</td><td>NoMeds</td><td>-0.020953</td><td>4.0</td></tr><tr><th>&vellip;</th><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td></tr></tbody></table>
 
 
 
@@ -732,7 +736,158 @@ fit!(vlmm, init = vlmm)
 
 
 
+## Additional Features
 
-```julia
+WiSER.jl has additional features that may benefit some users. These include parallelizaiton and observation weights.
+
+### Parallelization
+
+WiSER.jl by default will not run objective function evaluations in parallel, but one at a time. In many cases (small number of individuals/relatively small number of observations per individual) it is faster to not parallelize the code as the internal overhead in setting up evaluations on multiple threads takes longer than the evaluations. However, with large numbers of observations per individual, or many individuals, it can be faster to parallelize.
+
+In order to allow for parallelization, the julia environmental variable `JULIA_NUM_THREADS` should be set to a value greater than 1. This must be set before julia launches and can be done in couple ways:
+
+- Setting a default number of threads for Julia to launch with in a .bash_profile file by adding a line `export JULIA_NUM_THREADS=X`. where X is the number of threads you wish to make the default.
+- Before launching julia in the terminal, export the variable as done below:
 
 ```
+$ export JULIA_NUM_THREADS=X
+$ julia
+```
+
+This is different from the threads available used by BLAS commands. To check this number of threads for parallelization, run the following:
+
+
+```julia
+Threads.nthreads()
+```
+
+
+
+
+    4
+
+
+
+We see there are 4 threads available. 
+
+To parallelize the objective function in WiSER, simply add the keyword argument `parallel = true` in the `fit!()` function.
+
+
+```julia
+WiSER.fit!(vlmm, parallel = true)
+```
+
+    
+    ******************************************************************************
+    This program contains Ipopt, a library for large-scale nonlinear optimization.
+     Ipopt is released as open source code under the Eclipse Public License (EPL).
+             For more information visit http://projects.coin-or.org/Ipopt
+    ******************************************************************************
+    
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.388894
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.181731
+
+
+
+
+
+    
+    Within-subject variance estimation by robust regression (WiSER)
+    Number of individuals/clusters: 500
+    Total observations: 5011
+    
+    Fixed-effects parameters:
+    ───────────────────────────────────────────────────────────
+                         Estimate  Std. Error       Z  Pr(>|Z|)
+    ───────────────────────────────────────────────────────────
+    β1: (Intercept)   106.308       0.14384    739.07    <1e-99
+    β2: agegroup       14.9844      0.0633245  236.63    <1e-99
+    β3: gender: Male   10.0749      0.100279   100.47    <1e-99
+    β4: bmi_std         0.296424    0.0139071   21.31    <1e-99
+    β5: meds: OnMeds  -10.1107      0.122918   -82.26    <1e-99
+    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-9
+    τ2: agegroup        1.50759     0.135456    11.13    <1e-28
+    τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    <1e-11
+    τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
+    ───────────────────────────────────────────────────────────
+    Random effects covariance matrix Σγ:
+     "γ1: (Intercept)"  1.00196    0.0181387
+     "γ2: bmi_std"      0.0181387  0.000549357
+    
+
+
+
+
+We can see slight timing differences at this sample size:
+
+
+```julia
+@time WiSER.fit!(vlmm, parallel = false);
+```
+
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.217896
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.224410
+      0.455338 seconds (998 allocations: 53.172 KiB)
+
+
+
+```julia
+@time WiSER.fit!(vlmm, parallel = true);
+```
+
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.192498
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.181518
+      0.385989 seconds (2.53 k allocations: 228.031 KiB)
+
+
+### Observation Weights
+
+It can be useful for some users to fit WiSER with observation weights. We have implemented this feature, which can be done in the model constructor via the `wtvar` keyword. Note: Within each individual, observation weights are the same. We assume weights are per-indiviudal.
+
+In the example data, the dataframe has a column `obswt`, corresponding to observation weights for each individual. 
+
+
+```julia
+vlmm_wts = WSVarLmmModel(
+    @formula(sbp ~ 1 + agegroup + gender + bmi_std + meds), 
+    @formula(sbp ~ 1 + bmi_std), 
+    @formula(sbp ~ 1 + agegroup + meds + bmi_std),
+    :id, df; wtvar = :obswt);
+
+@time WiSER.fit!(vlmm_wts)
+```
+
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.158033, ‖ΔL‖ = 0.102058, status = Optimal, time(s) = 0.203535
+    run = 2, ‖Δβ‖ = 0.006134, ‖Δτ‖ = 0.007594, ‖ΔL‖ = 0.056873, status = Optimal, time(s) = 0.284779
+      0.501394 seconds (1.01 k allocations: 54.703 KiB)
+
+
+
+
+
+    
+    Within-subject variance estimation by robust regression (WiSER)
+    Number of individuals/clusters: 500
+    Total observations: 5011
+    
+    Fixed-effects parameters:
+    ────────────────────────────────────────────────────────────
+                          Estimate  Std. Error       Z  Pr(>|Z|)
+    ────────────────────────────────────────────────────────────
+    β1: (Intercept)   106.309       0.143971    738.41    <1e-99
+    β2: agegroup       14.9841      0.0633336   236.59    <1e-99
+    β3: gender: Male   10.0748      0.100288    100.46    <1e-99
+    β4: bmi_std         0.296066    0.0139064    21.29    <1e-99
+    β5: meds: OnMeds  -10.1101      0.122602    -82.46    <1e-99
+    τ1: (Intercept)    -2.51639     0.267541     -9.41    <1e-20
+    τ2: agegroup        1.50717     0.0914489    16.48    <1e-60
+    τ3: meds: OnMeds   -0.445596    0.0366911   -12.14    <1e-33
+    τ4: bmi_std         0.00634263  0.00812327    0.78    0.4349
+    ────────────────────────────────────────────────────────────
+    Random effects covariance matrix Σγ:
+     "γ1: (Intercept)"  1.05449    0.0279852
+     "γ2: bmi_std"      0.0279852  0.000792437
+    
+
+
+
