@@ -1,9 +1,9 @@
 module DFTest
 # Test for df.jl and rand.jl functions
-using DataFrames, JuliaDB, LinearAlgebra, Random, Test, WiSER
+using DataFrames, Tables, LinearAlgebra, Random, Test, WiSER
 
 Random.seed!(123)
-t = table((
+t = columntable((
     id     = [1; 1; 2; 3; 3; 3; 4], 
     y      = [missing; randn(6)],
     x1     = ones(7), 
