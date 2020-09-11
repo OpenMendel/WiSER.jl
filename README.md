@@ -7,7 +7,7 @@
 
 WiSER stands for **wi**thin-**s**ubject variance **e**stimation by **r**obust regression. It is a regression aproach for estimating the effects of predictors on the within-subject variation in a longitudinal setting. 
 
-WiSER.jl requires Julia v1.3 or later. See documentation for usage. It is not yet registered and can be installed, in the Julia Pkg mode, by
+WiSER.jl requires Julia v1.0 or later. See documentation for usage. It is not yet registered and can be installed, in the Julia Pkg mode, by
 ```{julia}
 (@v1.4) Pkg> add https://github.com/OpenMendel/WiSER.jl
 ```
