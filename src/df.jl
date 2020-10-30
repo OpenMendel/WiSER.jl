@@ -7,7 +7,7 @@ function DataFrame(m::WSVarLmmModel)
     p, q, l, n = m.p, m.q, m.l, m.nsum
     # preallocate arrays
     id = Vector{Int}(undef, n)
-    y  = Vector{Float64}(undef, n)
+    y  = Matrix{Float64}(undef, n, 1)
     X  = Matrix{Float64}(undef, n, p)
     Z  = Matrix{Float64}(undef, n, q)
     W  = Matrix{Float64}(undef, n, l)
@@ -15,28 +15,62 @@ function DataFrame(m::WSVarLmmModel)
     if addweight
         weights = Vector{Float64}(undef, n)
     end
+
+    #get names to reconstruct Dataframe properly
+    meannames = map(x -> join(x[2:end], ": "),  (split.(m.meannames, ": ")))
+    renames = map(x -> join(x[2:end], ": "),  (split.(m.renames, ": ")))
+    wsvarnames = map(x -> join(x[2:end], ": "),  (split.(m.wsvarnames, ": ")))
+    allnames = union(meannames, renames, wsvarnames)
+
     # gather data
     offset = 1
     for (i, vlmmobs) in enumerate(m.data)
         ni            = length(vlmmobs.y)
         rangei        = offset:(offset + ni - 1)
-        id[rangei]   .= i
-         y[rangei]    = vlmmobs.y
-         X[rangei, :] = transpose(vlmmobs.Xt)
-         Z[rangei, :] = transpose(vlmmobs.Zt)
-         W[rangei, :] = transpose(vlmmobs.Wt)
-         if addweight
+        id[rangei]   .= m.ids[i]
+        y[rangei]    = vlmmobs.y
+        X[rangei, :] = transpose(vlmmobs.Xt)
+        Z[rangei, :] = transpose(vlmmobs.Zt)
+        W[rangei, :] = transpose(vlmmobs.Wt)
+        if addweight
             weights[rangei] .= m.obswts[i]
-         end
+        end
         offset       += ni
     end
-    df = hcat(DataFrame(id = id, y = y), 
-        DataFrame(X, [Symbol("x$i") for i in 1:p]), 
-        DataFrame(Z, [Symbol("z$i") for i in 1:q]), 
-        DataFrame(W, [Symbol("w$i") for i in 1:l]))
+
+    # Skip repeated variables in X, Z, W
+    Zcols = .![zname in meannames for zname in renames]
+    Wcols = .![(wname in meannames || wname in renames) for wname in wsvarnames]
+
+    # Construct DataFrame
+    df = hcat(DataFrame(id = id),
+        DataFrame(y, [m.respname]), 
+        DataFrame(X, meannames), 
+        DataFrame(Z[:, Zcols], renames[Zcols]), 
+        DataFrame(W[:, Wcols], wsvarnames[Wcols]))
     categorical!(df, :id)
     if addweight
         df[!, :obswts] = weights
+    end
+
+    # Create columns for factored variables (for reusing original formula and GWAS)
+    isfactor = occursin.(": ", allnames)
+    splitnames = map(x -> split(x, ": ")[1], allnames)
+
+    for name in unique(splitnames)
+        numfactors = findall(isequal.(name, splitnames))
+        if (length(numfactors) == 1 && .!(any(isfactor[numfactors])))
+            continue
+        end
+        factors = map(x -> join(split(x, ": ")[2:end], ": "),
+            allnames[numfactors])
+        valholder = repeat([""], n)
+        for factor in factors 
+            dfname = join([name, factor], ": ")
+            valholder[df[!, dfname] .== 1] .= factor
+        end
+        valholder[valholder .== ""] .= "Reference"
+        df[!, name] = valholder
     end
     df
 end
@@ -112,6 +146,7 @@ function WSVarLmmModel(
     wsvarformula = apply_schema(wsvarformula, schema(wsvarformula, tbl))#, ydict))
     
     # variable names
+    respname = string(meanformula.lhs)
     meannames = StatsModels.coefnames(meanformula.rhs)
     # either array{Names} or string of one variable
     meannames = typeof(meannames) <: Array ? ["β$i: " for i in 1:length(meannames)] .*
@@ -123,6 +158,10 @@ function WSVarLmmModel(
     wsvarnames = typeof(wsvarnames) <: Array ?  ["τ$i: " for i in 1:length(wsvarnames)] .*
         wsvarnames : ["τ1: " * wsvarnames]
 
+    # build grouped dataframe and record ID order
+    gdf = DataFrames.groupby(DataFrame!(tbl), idvar)
+    ids = map(x -> x[1], keys(gdf))
+
     if isempty(string(wtvar)) 
         wts = []
     else
@@ -130,10 +169,11 @@ function WSVarLmmModel(
         wtvar  = Symbol(wtvar)
         wtvar in cnames || 
             error("weight variable $wtvar not in datatable $tbl")
-        wts = combine(DataFrames.groupby(DataFrame!(tbl), idvar), wtvar => first)[!, 2]
+        wts = combine(gdf, wtvar => first)[!, 2]
     end
-    obsvec = combine(varlmmobs, DataFrames.groupby(DataFrame!(tbl), idvar))[!, 2]
-    varlmm = WSVarLmmModel(obsvec, meannames = meannames, renames = renames,
-    wsvarnames = wsvarnames, obswts = wts)
+    obsvec = combine(varlmmobs, gdf)[!, 2]
+    varlmm = WSVarLmmModel(obsvec, respname = respname, 
+        meannames = meannames, renames = renames,
+        wsvarnames = wsvarnames, ids = ids, obswts = wts)
     return varlmm
 end

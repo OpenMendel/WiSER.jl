@@ -17,9 +17,9 @@ t = columntable((
     obswts = [2.0; 2.0; 1.0; 0.5; 0.5; 0.5; 1.0]))
 df = DataFrame(t)
 
-f1 = @formula(y ~ 1 + x2 + x3)
-f2 = @formula(y ~ 1 + z2)
-f3 = @formula(y ~ 1 + w2 + w3)
+f1 = @formula(y ~ x1 + x2 + x3)
+f2 = @formula(y ~ z1 + z2)
+f3 = @formula(y ~ w1 + w2 + w3)
 
 vlma = WSVarLmmModel(f1, f2, f3, :id, t; wtvar = :obswts)
 dfa  = DataFrame(vlma)

@@ -231,9 +231,11 @@ Within-subject variance linear mixed model, which contains a vector of
 struct WSVarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
     data       :: Vector{WSVarLmmObs{T}}
+    respname   :: String
     meannames  :: Vector{String} # names of mean fixed effect variables
     renames    :: Vector{String} # names of random location effect variables
     wsvarnames :: Vector{String} # names of ws var fixed effect variables
+    ids        :: Union{Vector{AbstractString}, Vector{Int}} # IDs of individuals/clusters in order
     obswts     :: Vector{T} # individual/cluster weights
     # dimenions
     p          :: Int       # number of mean parameters in linear regression
@@ -278,9 +280,11 @@ end
 function WSVarLmmModel(
     obsvec     :: Vector{WSVarLmmObs{T}};
     obswts     :: Vector = [],
+    respname   :: String = "y",
     meannames  :: Vector{String} = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
     renames    :: Vector{String} = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
     wsvarnames :: Vector{String} = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
+    ids        :: Union{Vector{AbstractString}, Vector{Int}} = collect(1:length(obsvec))
     ) where T <: BlasReal
     # dimensions
     p       = size(obsvec[1].Xt, 1)
@@ -342,8 +346,8 @@ function WSVarLmmModel(
     vcov     = Matrix{T}(undef, p + q◺ + l, p + q◺ + l)
     # constructor
     WSVarLmmModel{T}(
-        obsvec, meannames, renames, wsvarnames, obswts,
-        p, q, l, m, nsum,
+        obsvec, respname, meannames, renames, wsvarnames,
+        ids, obswts, p, q, l, m, nsum,
         xtx, xty, wtw, ztz2, ztz2od,
         β,  τ,  Lγ, Σγ,
         ∇β, ∇τ, ∇Lγ, ∇Σγ,
@@ -363,6 +367,13 @@ confint(m::WSVarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
     stderror(m) * quantile(Normal(), (1. - level) / 2.) * [1. -1.]
 confint(m::WSVarLmmModel) = confint(m, 0.95)
 
+function getformula(m::WSVarLmmModel, s::String)
+    names = s == "mean" ? m.meannames : s == "var" ?
+        m.wsvarnames : s == "re" ? m.renames : nothing
+    lhs = join(map(x -> join(x[2:end], ": "),  (split.(names, ": "))), " + ")
+    return m.respname * " ~ " * lhs
+end
+
 function coeftable(m::WSVarLmmModel)
     mstder = stderror(m)
     mcoefs = coef(m)
@@ -380,7 +391,14 @@ function Base.show(io::IO, m::WSVarLmmModel)
     end
     println(io)
     println(io, "Within-subject variance estimation by robust regression (WiSER)")
-    #println(io, " ", m.formula)
+    println(io)
+    println(io, "Mean Formula:")
+    println(io, getformula(m, "mean"))
+    println(io, "Random Effects Formula:")
+    println(io, getformula(m, "re"))
+    println(io, "Within-Subject Variance Formula:")
+    println(io, getformula(m, "var"))
+    println(io)
     println(io, "Number of individuals/clusters: $(m.m)")
     println(io, "Total observations: $(m.nsum)")
     println(io)
