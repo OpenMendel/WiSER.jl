@@ -294,7 +294,7 @@ function WSVarLmmModel(
                         sum(term.(Symbol.(renames)))),
     wsvarformula:: FormulaTerm = FormulaTerm(term(Symbol(respname)), 
                         sum(term.(Symbol.(wsvarnames)))),
-    ids         :: Union{Vector{AbstractString}, Vector{Int}} = collect(1:length(obsvec))
+    ids         :: Union{Vector{<:AbstractString}, Vector{Int}} = collect(1:length(obsvec))
     ) where T <: BlasReal
     # dimensions
     p            = size(obsvec[1].Xt, 1)
