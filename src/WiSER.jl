@@ -230,75 +230,86 @@ Within-subject variance linear mixed model, which contains a vector of
 """
 struct WSVarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data       :: Vector{WSVarLmmObs{T}}
-    respname   :: String
-    meannames  :: Vector{String} # names of mean fixed effect variables
-    renames    :: Vector{String} # names of random location effect variables
-    wsvarnames :: Vector{String} # names of ws var fixed effect variables
-    ids        :: Union{Vector{AbstractString}, Vector{Int}} # IDs of individuals/clusters in order
-    obswts     :: Vector{T} # individual/cluster weights
+    data            :: Vector{WSVarLmmObs{T}}
+    respname        :: String
+    meannames       :: Vector{String} # names of mean fixed effect variables
+    renames         :: Vector{String} # names of random location effect variables
+    wsvarnames      :: Vector{String} # names of ws var fixed effect variables
+    meanformula     :: FormulaTerm
+    reformula       :: FormulaTerm
+    wsvarformula    ::FormulaTerm
+    ids             :: Union{Vector{AbstractString}, Vector{Int}} # IDs of individuals/clusters in order
+    obswts          :: Vector{T} # individual/cluster weights
     # dimenions
-    p          :: Int       # number of mean parameters in linear regression
-    q          :: Int       # number of random effects
-    l          :: Int       # number of parameters for modeling WS variability
-    m          :: Int       # number of individuals/clusters
-    nsum       :: Int       # number of observations (summed across individuals)
+    p               :: Int       # number of mean parameters in linear regression
+    q               :: Int       # number of random effects
+    l               :: Int       # number of parameters for modeling WS variability
+    m               :: Int       # number of individuals/clusters
+    nis             :: Vector{Int}  # number of observations per cluster 
+    nsum            :: Int       # number of observations (summed across individuals)
     # sufficient statistics
-    xtx        :: Matrix{T} # sum_i Xi'Xi
-    xty        :: Vector{T} # sum_i Xi'yi
-    wtw        :: Matrix{T} # sum_i Wi'Wi
-    ztz2       :: Matrix{T} # sum_i Zi'Zi ⊗ Zi'Zi
-    ztz2od     :: Matrix{T} # sum_i (Zi'Zi ⊗ Zi'Zi - (Zi' ⊙ Zi')(Zi' ⊙ Zi')')
+    xtx             :: Matrix{T} # sum_i Xi'Xi
+    xty             :: Vector{T} # sum_i Xi'yi
+    wtw             :: Matrix{T} # sum_i Wi'Wi
+    ztz2            :: Matrix{T} # sum_i Zi'Zi ⊗ Zi'Zi
+    ztz2od          :: Matrix{T} # sum_i (Zi'Zi ⊗ Zi'Zi - (Zi' ⊙ Zi')(Zi' ⊙ Zi')')
     # parameters
-    β          :: Vector{T}  # p-vector of mean regression coefficients
-    τ          :: Vector{T}  # l-vector of WS variability regression coefficients
-    Lγ         :: Matrix{T}  # q by q lower triangular Cholesky factor of cov(γ)
-    Σγ         :: Matrix{T}  # q by q covariance matrix of γ
+    β               :: Vector{T}  # p-vector of mean regression coefficients
+    τ               :: Vector{T}  # l-vector of WS variability regression coefficients
+    Lγ              :: Matrix{T}  # q by q lower triangular Cholesky factor of cov(γ)
+    Σγ              :: Matrix{T}  # q by q covariance matrix of γ
     # working arrays
-    ∇β         :: Vector{T}
-    ∇τ         :: Vector{T}
-    ∇Lγ        :: Matrix{T}
-    ∇Σγ        :: Vector{T}
-    Hββ        :: Matrix{T}
-    Hττ        :: Matrix{T}
-    HτLγ       :: Matrix{T}
-    HLγLγ      :: Matrix{T}
-    HΣγΣγ      :: Matrix{T}
+    ∇β              :: Vector{T}
+    ∇τ              :: Vector{T}
+    ∇Lγ             :: Matrix{T}
+    ∇Σγ             :: Vector{T}
+    Hββ             :: Matrix{T}
+    Hττ             :: Matrix{T}
+    HτLγ            :: Matrix{T}
+    HLγLγ           :: Matrix{T}
+    HΣγΣγ           :: Matrix{T}
     # weighted NLS or unweighted NLS
-    iswtnls    :: Vector{Bool}
+    iswtnls         :: Vector{Bool}
     # multi-threading or not
-    ismthrd    :: Vector{Bool}
+    ismthrd         :: Vector{Bool}
     # model has been fit or not
-    isfitted   :: Vector{Bool}
+    isfitted        :: Vector{Bool}
     # for sandwich estimator
-    ψ          :: Vector{T}
-    Ainv       :: Matrix{T}
-    B          :: Matrix{T}
-    vcov       :: Matrix{T}
+    ψ               :: Vector{T}
+    Ainv            :: Matrix{T}
+    B               :: Matrix{T}
+    vcov            :: Matrix{T}
 end
 
 function WSVarLmmModel(
-    obsvec     :: Vector{WSVarLmmObs{T}};
-    obswts     :: Vector = [],
-    respname   :: String = "y",
-    meannames  :: Vector{String} = ["β$i" for i in 1:size(obsvec[1].Xt, 1)],
-    renames    :: Vector{String} = ["γ$i" for i in 1:size(obsvec[1].Zt, 1)],
-    wsvarnames :: Vector{String} = ["τ$i" for i in 1:size(obsvec[1].Wt, 1)],
-    ids        :: Union{Vector{AbstractString}, Vector{Int}} = collect(1:length(obsvec))
+    obsvec      :: Vector{WSVarLmmObs{T}};
+    obswts      :: Vector = [],
+    respname    :: String = "y",
+    meannames   :: Vector{String} = ["x$i" for i in 1:size(obsvec[1].Xt, 1)],
+    renames     :: Vector{String} = ["z$i" for i in 1:size(obsvec[1].Zt, 1)],
+    wsvarnames  :: Vector{String} = ["w$i" for i in 1:size(obsvec[1].Wt, 1)],
+    meanformula :: FormulaTerm = FormulaTerm(term(Symbol(respname)), 
+                        sum(term.(Symbol.(meannames)))),
+    reformula   :: FormulaTerm = FormulaTerm(term(Symbol(respname)), 
+                        sum(term.(Symbol.(renames)))),
+    wsvarformula:: FormulaTerm = FormulaTerm(term(Symbol(respname)), 
+                        sum(term.(Symbol.(wsvarnames)))),
+    ids         :: Union{Vector{AbstractString}, Vector{Int}} = collect(1:length(obsvec))
     ) where T <: BlasReal
     # dimensions
-    p       = size(obsvec[1].Xt, 1)
-    q       = size(obsvec[1].Zt, 1)
-    l       = size(obsvec[1].Wt, 1)
-    m       = length(obsvec)
-    nsum    = sum(o -> length(o.y), obsvec)
-    q◺      = ◺(q)
+    p            = size(obsvec[1].Xt, 1)
+    q            = size(obsvec[1].Zt, 1)
+    l            = size(obsvec[1].Wt, 1)
+    m            = length(obsvec)
+    nis          = map(o -> length(o.y), obsvec)
+    nsum         = sum(nis)
+    q◺           = ◺(q)
     # sufficient statistics
-    xtx     = zeros(T, p, p)
-    xty     = zeros(T, p)
-    wtw     = zeros(T, l, l)
-    ztz2    = zeros(T, abs2(q), abs2(q))
-    ztz2od  = zeros(T, abs2(q), abs2(q))
+    xtx          = zeros(T, p, p)
+    xty          = zeros(T, p)
+    wtw          = zeros(T, l, l)
+    ztz2         = zeros(T, abs2(q), abs2(q))
+    ztz2od       = zeros(T, abs2(q), abs2(q))
     for obs in obsvec
         # accumulate Xi'Xi
         BLAS.syrk!('U', 'N', T(1), obs.Xt, T(1), xtx)
@@ -347,7 +358,8 @@ function WSVarLmmModel(
     # constructor
     WSVarLmmModel{T}(
         obsvec, respname, meannames, renames, wsvarnames,
-        ids, obswts, p, q, l, m, nsum,
+        meanformula, reformula, wsvarformula,
+        ids, obswts, p, q, l, m, nis, nsum,
         xtx, xty, wtw, ztz2, ztz2od,
         β,  τ,  Lγ, Σγ,
         ∇β, ∇τ, ∇Lγ, ∇Σγ,
@@ -355,6 +367,7 @@ function WSVarLmmModel(
         iswtnls, ismthrd, isfitted, 
         ψ, Ainv, B, vcov)
 end
+
 
 coefnames(m::WSVarLmmModel) = [m.meannames; m.wsvarnames]
 coef(m::WSVarLmmModel) = [m.β; m.τ]

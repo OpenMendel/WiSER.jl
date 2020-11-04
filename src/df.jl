@@ -174,6 +174,8 @@ function WSVarLmmModel(
     obsvec = combine(varlmmobs, gdf)[!, 2]
     varlmm = WSVarLmmModel(obsvec, respname = respname, 
         meannames = meannames, renames = renames,
-        wsvarnames = wsvarnames, ids = ids, obswts = wts)
+        wsvarnames = wsvarnames, ids = ids, obswts = wts,
+        meanformula = meanformula, reformula = reformula, 
+        wsvarformula = wsvarformula)
     return varlmm
 end
