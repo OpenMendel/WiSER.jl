@@ -237,8 +237,8 @@ struct WSVarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     wsvarnames      :: Vector{String} # names of ws var fixed effect variables
     meanformula     :: FormulaTerm
     reformula       :: FormulaTerm
-    wsvarformula    ::FormulaTerm
-    ids             :: Union{Vector{AbstractString}, Vector{Int}} # IDs of individuals/clusters in order
+    wsvarformula    :: FormulaTerm
+    ids             :: Union{Vector{<:AbstractString}, Vector{<:Int}} # IDs of individuals/clusters in order
     obswts          :: Vector{T} # individual/cluster weights
     # dimenions
     p               :: Int       # number of mean parameters in linear regression
@@ -381,9 +381,9 @@ confint(m::WSVarLmmModel, level::Real) = hcat(coef(m), coef(m)) +
 confint(m::WSVarLmmModel) = confint(m, 0.95)
 
 function getformula(m::WSVarLmmModel, s::String)
-    names = s == "mean" ? m.meannames : s == "var" ?
-        m.wsvarnames : s == "re" ? m.renames : nothing
-    lhs = join(map(x -> join(x[2:end], ": "),  (split.(names, ": "))), " + ")
+    frmla = s == "mean" ? m.meanformula : s == "var" ?
+        m.wsvarformula : s == "re" ? m.reformula : nothing
+    lhs = join(frmla.rhs, " + ")
     return m.respname * " ~ " * lhs
 end
 
