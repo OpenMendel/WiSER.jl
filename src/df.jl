@@ -121,6 +121,11 @@ function WSVarLmmModel(
     idvar = Symbol(idvar)
     iswtvar = !isempty(string(wtvar))
 
+    # keep original non-schema applied formulas for model object
+    orig_meanformla = deepcopy(meanformula)
+    orig_reformla = deepcopy(reformula)
+    orig_wsvarformla = deepcopy(wsvarformula)
+
     function varlmmobs(tab)
         y, X = modelcols(meanformula, tab)
         Z    = modelmatrix(reformula, tab)
@@ -175,7 +180,7 @@ function WSVarLmmModel(
     varlmm = WSVarLmmModel(obsvec, respname = respname, 
         meannames = meannames, renames = renames,
         wsvarnames = wsvarnames, ids = ids, obswts = wts,
-        meanformula = meanformula, reformula = reformula, 
-        wsvarformula = wsvarformula)
+        meanformula = orig_meanformla, reformula = orig_reformla, 
+        wsvarformula = orig_wsvarformla)
     return varlmm
 end
