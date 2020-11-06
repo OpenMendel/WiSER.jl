@@ -6,7 +6,7 @@ Convert the data in `WSVarLmmModel` to a `DataFrame`.
 function DataFrame(m::WSVarLmmModel)
     p, q, l, n = m.p, m.q, m.l, m.nsum
     # preallocate arrays
-    id = Vector{Int}(undef, n)
+    id = Vector{eltype(m.ids)}(undef, n)
     y  = Matrix{Float64}(undef, n, 1)
     X  = Matrix{Float64}(undef, n, p)
     Z  = Matrix{Float64}(undef, n, q)
@@ -20,7 +20,7 @@ function DataFrame(m::WSVarLmmModel)
     meannames = map(x -> join(x[2:end], ": "),  (split.(m.meannames, ": ")))
     renames = map(x -> join(x[2:end], ": "),  (split.(m.renames, ": ")))
     wsvarnames = map(x -> join(x[2:end], ": "),  (split.(m.wsvarnames, ": ")))
-    allnames = union(meannames, renames, wsvarnames)
+
 
     # gather data
     offset = 1
@@ -38,20 +38,25 @@ function DataFrame(m::WSVarLmmModel)
         offset       += ni
     end
 
-    # Skip repeated variables in X, Z, W
-    Zcols = .![zname in meannames for zname in renames]
-    Wcols = .![(wname in meannames || wname in renames) for wname in wsvarnames]
+    # Skip repeated variables in X, Z, W and don't copy interaction terms
+    Xcols = .![occursin("&", meanname) for meanname in meannames]
+    Zcols = .![(zname in meannames || occursin("&", zname)) for zname in renames]
+    Wcols = .![(wname in meannames || wname in renames || 
+        occursin("&", wname)) for wname in wsvarnames]
 
     # Construct DataFrame
     df = hcat(DataFrame(id = id),
         DataFrame(y, [m.respname]), 
-        DataFrame(X, meannames), 
+        DataFrame(X[:, Xcols], meannames[Xcols]), 
         DataFrame(Z[:, Zcols], renames[Zcols]), 
         DataFrame(W[:, Wcols], wsvarnames[Wcols]))
-    categorical!(df, :id)
     if addweight
         df[!, :obswts] = weights
     end
+
+
+    allnames = union(meannames, renames, wsvarnames)
+    filter!(x -> !occursin("&", x), allnames)
 
     # Create columns for factored variables (for reusing original formula and GWAS)
     isfactor = occursin.(": ", allnames)
@@ -71,6 +76,8 @@ function DataFrame(m::WSVarLmmModel)
         end
         valholder[valholder .== ""] .= "Reference"
         df[!, name] = valholder
+        df[!, name] = levels!(CategoricalArray(df[!, name]),
+            ["Reference"; factors]);
     end
     df
 end
