@@ -383,8 +383,9 @@ confint(m::WSVarLmmModel) = confint(m, 0.95)
 function getformula(m::WSVarLmmModel, s::String)
     frmla = s == "mean" ? m.meanformula : s == "var" ?
         m.wsvarformula : s == "re" ? m.reformula : nothing
-    lhs = join(frmla.rhs, " + ")
-    return m.respname * " ~ " * lhs
+    rhs = length(terms(frmla.rhs)) == 1 ? 
+        string(term(frmla.rhs)) : join(frmla.rhs, " + ")
+    return m.respname * " ~ " * rhs
 end
 
 function coeftable(m::WSVarLmmModel)
