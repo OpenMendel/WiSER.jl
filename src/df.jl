@@ -171,7 +171,7 @@ function WSVarLmmModel(
         wsvarnames : ["τ1: " * wsvarnames]
 
     # build grouped dataframe and record ID order
-    gdf = DataFrames.groupby(DataFrame!(tbl), idvar)
+    gdf = DataFrames.groupby(DataFrame(tbl, copycols = false), idvar)
     ids = map(x -> x[1], keys(gdf))
 
     if isempty(string(wtvar)) 
