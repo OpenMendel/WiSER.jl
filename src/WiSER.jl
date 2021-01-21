@@ -1,7 +1,7 @@
 module WiSER
 
 using DataFrames, Tables, LinearAlgebra, MathProgBase
-using Printf, Reexport, Statistics
+using Printf, Reexport, Statistics, CategoricalArrays
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 @reexport using Ipopt
