@@ -16,7 +16,7 @@ Use the backspace key to return to the Julia REPL.
 
 WiSER was created to efficiently estimate effects of covarariates on within-subject (WS) variability in logitudinal data. The following graphic depicts the motiviation for WiSER and what it can model.
 
-<img src="notebooks/wisermotivation.png" width="750">
+<img src="wisermotivation.png" width="750">
 
 The figure above displays systolic blood pressure (SBP) measured for two patients followed up over 40-visits. At baseline, we see a difference in both mean and variability of SBP between the two patients. After the 20th visit, patient 1 goes on blood pressure medication and their mean and WS variance of SBP more similarly match patient 2's. It can be of clinical importance to model what factors associated with these baseline differences in mean and WS variance as well as how being on medication (a time-varying covariate) affects these measures. WiSER is able to simultaneously model (time-invariant and time-varying) covariates' effects on mean and within-subject variability of longitudinal traits. 
 
@@ -30,52 +30,52 @@ In addition to mean levels, it can be important to model factors influencing wit
 The procedure assumes the following model for the data:
 
 Data:
-- $\textbf{y}_{ij}$ longitudinal response of subject $i$ at time $j$
-- $\textbf{x}_{ij}$ mean fixed effects covariates of subject $i$ at time $j$
-- $\textbf{z}_{ij}$ random (location) effects covariates of subject $i$ at time $j$
-- $\textbf{w}_{ij}$ within-subject variance fixed effects covariates of subject $i$ at time $j$
+
+- $\textbf{y}_{ij}$, longitudinal response of subject $i$ at time $j$
+- $\textbf{x}_{ij}$, mean fixed effects covariates of subject $i$ at time $j$
+- $\textbf{z}_{ij}$, random (location) effects covariates of subject $i$ at time $j$
+- $\textbf{w}_{ij}$, within-subject variance fixed effects covariates of subject $i$ at time $j$
 
 Parameters:
-- $\boldsymbol{\beta}$ mean fixed effects
-- $\boldsymbol{\tau}$ within-subject variance fixed effects
-- $\boldsymbol{\boldsymbol{\gamma}_i}$ random location effects of subject $i$
-- $\boldsymbol{\Sigma}_{\boldsymbol{\gamma}}$ random (location) effects covariance matrix
-- $\omega_i$ random scale effect of subject $i$
-- $\sigma_\omega^2$ variance of random scale effect
-- $\boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega}$ joint random effects covariance matrix
+- $\boldsymbol{\beta}$, mean fixed effects
+- $\boldsymbol{\tau}$, within-subject variance fixed effects
+- $\boldsymbol{\boldsymbol{\gamma}_i}$, random location effects of subject $i$
+- $\boldsymbol{\Sigma}_{\boldsymbol{\gamma}}$, random (location) effects covariance matrix
+- $\omega_i$, random scale effect of subject $i$
+- $\sigma_\omega^2$, variance of random scale effect
+- $\boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega}$, joint random effects covariance matrix
 
 Other:
-- $\mathcal{D(a, b)}$ unspecified distribution with mean $a$ and variance $b$
-- $\epsilon_{ij}$ error term of subject $i$ and time $j$ capturing within-subject variability
+- $\mathcal{D(a, b)}$, unspecified distribution with mean $a$ and variance $b$
+- $\epsilon_{ij}$, error term of subject $i$ and time $j$ capturing within-subject variability
 
 
 
 The longitduinal data are modeled via:
 
-\begin{eqnarray*}
-y_{ij} &=& \textbf{x}_{ij}^T\boldsymbol{\beta} + \textbf{z}_{ij}^T\boldsymbol{\gamma}_i + \epsilon_{ij}, \\
-\epsilon_{ij} &\sim& \mathcal{D}(0, \sigma_{\epsilon_{ij}}^2), \\
+\begin{align}
+y_{ij} &=& \textbf{x}_{ij}^T\boldsymbol{\beta} + \textbf{z}_{ij}^T\boldsymbol{\gamma}_i + \epsilon_{ij}, \epsilon_{ij} \sim \mathcal{D}(0, \sigma_{\epsilon_{ij}}^2), \\
 \boldsymbol{\gamma_i} &=& (\gamma_{i1}, \gamma_{i2}, \cdots, \gamma_{iq})^T \sim \mathcal{D}(\mathbf{0}_{q}, \boldsymbol{\Sigma}_{\boldsymbol{\gamma}}),
-\end{eqnarray*}
+\end{align}
 
 where
 
-\begin{eqnarray*}
+\begin{align}
 \sigma_{\epsilon_{ij}}^2 = \exp (\textbf{w}_{ij}^T \boldsymbol{\tau} + \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega}^T \boldsymbol{\gamma_i} + \omega_i)  \text{,   }\omega_i \sim \mathcal{D}(0, \sigma_\omega^2)
-\end{eqnarray*}
+\end{align}
 
 represents the within-subject variance with $\boldsymbol{\ell}_{\gamma \omega}^T$ coming from the Cholesky factor of the covariance matrix of the joint distribution of random effects ($\boldsymbol{\gamma}_i$, $\omega_i$). 
 The joint distribution
 
-\begin{eqnarray*}
+\begin{align}
 \begin{pmatrix}
 \boldsymbol{\gamma_i} \\ \omega_i
 \end{pmatrix} \sim \mathcal{D}(\mathbf{0}_{q+1}, \boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega})
-\end{eqnarray*}
+\end{align}
 
 and denote the Cholesky decomposition of the covariance matrix $\boldsymbol{\Sigma_{\gamma w}}$ as
 
-\begin{eqnarray*}
+\begin{align}
 \boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega} &=& \begin{pmatrix}
 \boldsymbol{\Sigma}_{\boldsymbol{\gamma}} & \boldsymbol{\sigma}_{\boldsymbol{\gamma} \omega} \\
 \boldsymbol{\sigma}_{\boldsymbol{\gamma} \omega}^T & \sigma_\omega^2
@@ -84,16 +84,16 @@ and denote the Cholesky decomposition of the covariance matrix $\boldsymbol{\Sig
 \textbf{L}_{\boldsymbol{\gamma}} & \mathbf{0} \\
 \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega}^T & \ell_{\omega}
 \end{pmatrix},
-\end{eqnarray*}
+\end{align}
 
 where $\textbf{L}_{\boldsymbol{\gamma}}$ is a $q \times q$ upper triangular matrix with positive diagonal entries and $\ell_{\omega} > 0$. The elements of $\boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega}$ can be expressed in terms of the Cholesky factors as:
 
 
-\begin{eqnarray*}
+\begin{align}
 \boldsymbol{\Sigma}_{\boldsymbol{\gamma}} &=& \textbf{L}_{\boldsymbol{\gamma}} \textbf{L}_{\boldsymbol{\gamma}}^T \\ 
 \boldsymbol{\sigma}_{\boldsymbol{\gamma} \omega} &=& \textbf{L}_{\boldsymbol{\gamma}} \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega} \\
 \sigma_\omega^2 &=& \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega}^T \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega} + \ell_{\omega}^2 
-\end{eqnarray*}
+\end{align}
 
 
 In Dzubuar et al's estimation, they assume all unspecified distributions above are Normal distributions. Our estimation procedure is robust and only needs that the mean and variance of those random variables hold. In their MixWILD software, they fit the model through maximum likelihood, requiring numerically intensive numerical integration. 

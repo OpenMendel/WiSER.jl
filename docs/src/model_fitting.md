@@ -9,10 +9,6 @@ Here we cover model construction and parameter estimation using WiSER.
 using CSV, DataFrames, WiSER
 ```
 
-    ┌ Info: Precompiling WiSER [2ff19380-1883-49fc-9d10-450face6b90c]
-    └ @ Base loading.jl:1260
-
-
 ## Example data
 
 The example dataset, `sbp.csv`, is contained in `data` folder of the package. It is a simulated datatset with 500 individuals, each having 9~11 observations. The outcome, systolic blood pressure (SBP), is a function of other covariates. Below we read in the data as a `DataFrame` using the [CSV package](https://juliadata.github.io/CSV.jl). WiSER.jl can take other data table objects that comply with the `Tables.jl` format, such as `IndexedTables` from the [JuliaDB](https://github.com/JuliaData/JuliaDB.jl) package.
@@ -23,12 +19,28 @@ filepath = normpath(joinpath(dirname(pathof(WiSER)), "../data/"))
 df = DataFrame!(CSV.File(filepath * "sbp.csv"))
 ```
 
-
-
-
-<table class="data-frame"><thead><tr><th></th><th>id</th><th>sbp</th><th>agegroup</th><th>gender</th><th>bmi</th><th>meds</th><th>bmi_std</th><th>obswt</th></tr><tr><th></th><th>Int64</th><th>Float64</th><th>Float64</th><th>String</th><th>Float64</th><th>String</th><th>Float64</th><th>Float64</th></tr></thead><tbody><p>5,011 rows × 8 columns</p><tr><th>1</th><td>1</td><td>159.586</td><td>3.0</td><td>Male</td><td>23.1336</td><td>NoMeds</td><td>-1.57733</td><td>4.0</td></tr><tr><th>2</th><td>1</td><td>161.849</td><td>3.0</td><td>Male</td><td>26.5885</td><td>NoMeds</td><td>1.29927</td><td>4.0</td></tr><tr><th>3</th><td>1</td><td>160.484</td><td>3.0</td><td>Male</td><td>24.8428</td><td>NoMeds</td><td>-0.154204</td><td>4.0</td></tr><tr><th>4</th><td>1</td><td>161.134</td><td>3.0</td><td>Male</td><td>24.9289</td><td>NoMeds</td><td>-0.0825105</td><td>4.0</td></tr><tr><th>5</th><td>1</td><td>165.443</td><td>3.0</td><td>Male</td><td>24.8057</td><td>NoMeds</td><td>-0.185105</td><td>4.0</td></tr><tr><th>6</th><td>1</td><td>160.053</td><td>3.0</td><td>Male</td><td>24.1583</td><td>NoMeds</td><td>-0.72415</td><td>4.0</td></tr><tr><th>7</th><td>1</td><td>162.1</td><td>3.0</td><td>Male</td><td>25.2543</td><td>NoMeds</td><td>0.188379</td><td>4.0</td></tr><tr><th>8</th><td>1</td><td>163.153</td><td>3.0</td><td>Male</td><td>24.3951</td><td>NoMeds</td><td>-0.527037</td><td>4.0</td></tr><tr><th>9</th><td>1</td><td>166.675</td><td>3.0</td><td>Male</td><td>26.1514</td><td>NoMeds</td><td>0.935336</td><td>4.0</td></tr><tr><th>10</th><td>2</td><td>130.765</td><td>1.0</td><td>Male</td><td>22.6263</td><td>NoMeds</td><td>-1.99977</td><td>3.0</td></tr><tr><th>11</th><td>2</td><td>131.044</td><td>1.0</td><td>Male</td><td>24.7404</td><td>NoMeds</td><td>-0.239477</td><td>3.0</td></tr><tr><th>12</th><td>2</td><td>131.22</td><td>1.0</td><td>Male</td><td>25.3415</td><td>NoMeds</td><td>0.260949</td><td>3.0</td></tr><tr><th>13</th><td>2</td><td>131.96</td><td>1.0</td><td>Male</td><td>25.6933</td><td>NoMeds</td><td>0.553886</td><td>3.0</td></tr><tr><th>14</th><td>2</td><td>130.09</td><td>1.0</td><td>Male</td><td>21.7646</td><td>NoMeds</td><td>-2.71724</td><td>3.0</td></tr><tr><th>15</th><td>2</td><td>130.556</td><td>1.0</td><td>Male</td><td>23.7895</td><td>NoMeds</td><td>-1.03123</td><td>3.0</td></tr><tr><th>16</th><td>2</td><td>132.001</td><td>1.0</td><td>Male</td><td>26.9103</td><td>NoMeds</td><td>1.56716</td><td>3.0</td></tr><tr><th>17</th><td>2</td><td>131.879</td><td>1.0</td><td>Male</td><td>24.1153</td><td>NoMeds</td><td>-0.759929</td><td>3.0</td></tr><tr><th>18</th><td>2</td><td>131.609</td><td>1.0</td><td>Male</td><td>25.3372</td><td>NoMeds</td><td>0.257432</td><td>3.0</td></tr><tr><th>19</th><td>2</td><td>132.149</td><td>1.0</td><td>Male</td><td>23.7171</td><td>NoMeds</td><td>-1.09154</td><td>3.0</td></tr><tr><th>20</th><td>2</td><td>130.653</td><td>1.0</td><td>Male</td><td>25.5947</td><td>NoMeds</td><td>0.471793</td><td>3.0</td></tr><tr><th>21</th><td>3</td><td>145.655</td><td>2.0</td><td>Male</td><td>25.3645</td><td>NoMeds</td><td>0.280102</td><td>4.0</td></tr><tr><th>22</th><td>3</td><td>147.384</td><td>2.0</td><td>Male</td><td>26.6756</td><td>NoMeds</td><td>1.37179</td><td>4.0</td></tr><tr><th>23</th><td>3</td><td>146.558</td><td>2.0</td><td>Male</td><td>25.6001</td><td>NoMeds</td><td>0.476309</td><td>4.0</td></tr><tr><th>24</th><td>3</td><td>146.731</td><td>2.0</td><td>Male</td><td>26.3532</td><td>NoMeds</td><td>1.10337</td><td>4.0</td></tr><tr><th>25</th><td>3</td><td>143.037</td><td>2.0</td><td>Male</td><td>24.4092</td><td>NoMeds</td><td>-0.515285</td><td>4.0</td></tr><tr><th>26</th><td>3</td><td>144.845</td><td>2.0</td><td>Male</td><td>25.1193</td><td>NoMeds</td><td>0.075975</td><td>4.0</td></tr><tr><th>27</th><td>3</td><td>145.366</td><td>2.0</td><td>Male</td><td>25.5029</td><td>NoMeds</td><td>0.395354</td><td>4.0</td></tr><tr><th>28</th><td>3</td><td>145.506</td><td>2.0</td><td>Male</td><td>25.9668</td><td>NoMeds</td><td>0.781658</td><td>4.0</td></tr><tr><th>29</th><td>3</td><td>143.155</td><td>2.0</td><td>Male</td><td>24.9327</td><td>NoMeds</td><td>-0.0793522</td><td>4.0</td></tr><tr><th>30</th><td>3</td><td>146.147</td><td>2.0</td><td>Male</td><td>25.0029</td><td>NoMeds</td><td>-0.020953</td><td>4.0</td></tr><tr><th>&vellip;</th><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td><td>&vellip;</td></tr></tbody></table>
-
-
+```jldoctest
+5011×8 DataFrame
+  Row │ id     sbp      agegroup  gender  bmi      meds    bmi_std     obswt   
+      │ Int64  Float64  Float64   String  Float64  String  Float64     Float64 
+──────┼────────────────────────────────────────────────────────────────────────
+    1 │     1  159.586       3.0  Male    23.1336  NoMeds  -1.57733        4.0
+    2 │     1  161.849       3.0  Male    26.5885  NoMeds   1.29927        4.0
+    3 │     1  160.484       3.0  Male    24.8428  NoMeds  -0.154204       4.0
+    4 │     1  161.134       3.0  Male    24.9289  NoMeds  -0.0825105      4.0
+    5 │     1  165.443       3.0  Male    24.8057  NoMeds  -0.185105       4.0
+    6 │     1  160.053       3.0  Male    24.1583  NoMeds  -0.72415        4.0
+    7 │     1  162.1         3.0  Male    25.2543  NoMeds   0.188379       4.0
+    8 │     1  163.153       3.0  Male    24.3951  NoMeds  -0.527037       4.0
+  ⋮   │   ⋮       ⋮        ⋮        ⋮        ⋮       ⋮         ⋮          ⋮
+ 5005 │   500  155.672       3.0  Female  24.4651  NoMeds  -0.468741       3.0
+ 5006 │   500  148.389       3.0  Female  25.8129  NoMeds   0.653514       3.0
+ 5007 │   500  152.491       3.0  Female  24.5818  NoMeds  -0.371555       3.0
+ 5008 │   500  153.844       3.0  Female  25.721   NoMeds   0.57693        3.0
+ 5009 │   500  150.164       3.0  Female  24.3545  NoMeds  -0.560843       3.0
+ 5010 │   500  150.248       3.0  Female  23.8532  NoMeds  -0.978159       3.0
+ 5011 │   500  152.433       3.0  Female  26.1232  NoMeds   0.911814       3.0
+```
 
 ## Formulate model
 
