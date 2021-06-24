@@ -16,7 +16,7 @@ Use the backspace key to return to the Julia REPL.
 
 WiSER was created to efficiently estimate effects of covarariates on within-subject (WS) variability in logitudinal data. The following graphic depicts the motiviation for WiSER and what it can model.
 
-<img src="wisermotivation.png" width="750">
+![](wisermotivation.png)
 
 The figure above displays systolic blood pressure (SBP) measured for two patients followed up over 40-visits. At baseline, we see a difference in both mean and variability of SBP between the two patients. After the 20th visit, patient 1 goes on blood pressure medication and their mean and WS variance of SBP more similarly match patient 2's. It can be of clinical importance to model what factors associated with these baseline differences in mean and WS variance as well as how being on medication (a time-varying covariate) affects these measures. WiSER is able to simultaneously model (time-invariant and time-varying) covariates' effects on mean and within-subject variability of longitudinal traits. 
 
@@ -31,23 +31,23 @@ The procedure assumes the following model for the data:
 
 Data:
 
-- ``\textbf{y}_{ij}``, longitudinal response of subject ``i`` at time ``j``
-- ``\textbf{x}_{ij}``, mean fixed effects covariates of subject ``i`` at time ``j``
-- ``\textbf{z}_{ij}``, random (location) effects covariates of subject ``i`` at time ``j``
-- ``\textbf{w}_{ij}``, within-subject variance fixed effects covariates of subject ``i`` at time ``j``
+- ``\textbf{y}_{ij}`` longitudinal response of subject ``i`` at time ``j``
+- ``\textbf{x}_{ij}`` mean fixed effects covariates of subject ``i`` at time ``j``
+- ``\textbf{z}_{ij}`` random (location) effects covariates of subject ``i`` at time ``j``
+- ``\textbf{w}_{ij}`` within-subject variance fixed effects covariates of subject ``i`` at time ``j``
 
 Parameters:
-- ``\boldsymbol{\beta}``, mean fixed effects
-- ``\boldsymbol{\tau}``, within-subject variance fixed effects
-- ``\boldsymbol{\boldsymbol{\gamma}_i}``, random location effects of subject ``i``
-- ``\boldsymbol{\Sigma}_{\boldsymbol{\gamma}}``, random (location) effects covariance matrix
-- ``\omega_i``, random scale effect of subject ``i``
-- ``\sigma_\omega^2``, variance of random scale effect
-- ``\boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega}``, joint random effects covariance matrix
+- ``\boldsymbol{\beta}`` mean fixed effects
+- ``\boldsymbol{\tau}`` within-subject variance fixed effects
+- ``\boldsymbol{\boldsymbol{\gamma}_i}`` random location effects of subject ``i``
+- ``\boldsymbol{\Sigma}_{\boldsymbol{\gamma}}`` random (location) effects covariance matrix
+- ``\omega_i`` random scale effect of subject ``i``
+- ``\sigma_\omega^2`` variance of random scale effect
+- ``\boldsymbol{\Sigma}_{\boldsymbol{\gamma} \omega}`` joint random effects covariance matrix
 
 Other:
-- ``\mathcal{D(a, b)}``, unspecified distribution with mean ``a`` and variance ``b``
-- ``\epsilon_{ij}``, error term of subject ``i`` and time ``j`` capturing within-subject variability
+- ``\mathcal{D(a, b)}`` unspecified distribution with mean ``a`` and variance ``b``
+- ``\epsilon_{ij}`` error term of subject ``i`` and time ``j`` capturing within-subject variability
 
 
 
