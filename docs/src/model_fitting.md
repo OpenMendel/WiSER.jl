@@ -62,6 +62,7 @@ WSVarLmmModel
 
 We will model sbp as a function of age, gender, and bmi_std. `bmi_std` is the centered and scaled `bmi`. The following commands fit the following model:
 
+
 $\text{sbp}_{ij} = \beta_0 + \beta_1 \text{agegroup}_{ij} + \beta_2 \text{gender}_{ij} + \beta_3 \text{bmi}_{ij} + \gamma_{i0} + \gamma_{i1}\text{bmi} + \epsilon_{ij}$
 
 ``\epsilon_{ij}`` is distributed with mean 0 variance ``\sigma^2_{\epsilon_{ij}}``
