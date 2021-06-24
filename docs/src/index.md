@@ -16,7 +16,9 @@ Use the backspace key to return to the Julia REPL.
 
 WiSER was created to efficiently estimate effects of covarariates on within-subject (WS) variability in logitudinal data. The following graphic depicts the motiviation for WiSER and what it can model.
 
-![](wisermotivation.png)
+<p align="center">
+  <img src="./wisermotivation.png" height="300" width="500">
+</p>
 
 The figure above displays systolic blood pressure (SBP) measured for two patients followed up over 40-visits. At baseline, we see a difference in both mean and variability of SBP between the two patients. After the 20th visit, patient 1 goes on blood pressure medication and their mean and WS variance of SBP more similarly match patient 2's. It can be of clinical importance to model what factors associated with these baseline differences in mean and WS variance as well as how being on medication (a time-varying covariate) affects these measures. WiSER is able to simultaneously model (time-invariant and time-varying) covariates' effects on mean and within-subject variability of longitudinal traits. 
 
@@ -25,13 +27,13 @@ The mean fixed effects are estimated in $\boldsymbol{\beta}$, the within-subject
 
 ## Model Details 
 
-In addition to mean levels, it can be important to model factors influencing within-subject variability of longitudinal outcomes. We utilize a modified linear mixed effects model that allows for within-subject variability to be modeled as through covariates. It is based on the [Mixed Effects Multiple Location Scale Model introduced by Dzubar et al. (2020)](https://link.springer.com/article/10.3758/s13428-019-01322-1). 
+In addition to mean levels, it can be important to model factors influencing within-subject variability of longitudinal outcomes. We utilize a modified linear mixed effects model that allows for within-subject variability to be modeled through covariates. It is motivated by a [Mixed Effects Multiple Location Scale Model introduced by Dzubar et al. (2020)](https://link.springer.com/article/10.3758/s13428-019-01322-1), but WiSER dispenses with the normal assumptions and is much faster that the likelihood method implemented in the [MixWILD](https://reach-lab.github.io/MixWildGUI/) software.
 
 The procedure assumes the following model for the data:
 
 Data:
 
-- ``\textbf{y}_{ij}`` longitudinal response of subject ``i`` at time ``j``
+- ``y_{ij}`` longitudinal response of subject ``i`` at time ``j``
 - ``\textbf{x}_{ij}`` mean fixed effects covariates of subject ``i`` at time ``j``
 - ``\textbf{z}_{ij}`` random (location) effects covariates of subject ``i`` at time ``j``
 - ``\textbf{w}_{ij}`` within-subject variance fixed effects covariates of subject ``i`` at time ``j``
@@ -55,7 +57,7 @@ The longitduinal data are modeled via:
 
 ```math
 \begin{aligned}
-y_{ij} &=& \textbf{x}_{ij}^T\boldsymbol{\beta} + \textbf{z}_{ij}^T\boldsymbol{\gamma}_i + \epsilon_{ij}, \epsilon_{ij} \sim \mathcal{D}(0, \sigma_{\epsilon_{ij}}^2), \\
+y_{ij} &=& \textbf{x}_{ij}^T\boldsymbol{\beta} + \textbf{z}_{ij}^T\boldsymbol{\gamma}_i + \epsilon_{ij}, \quad \epsilon_{ij} \sim \mathcal{D}(0, \sigma_{\epsilon_{ij}}^2), \\
 \boldsymbol{\gamma_i} &=& (\gamma_{i1}, \gamma_{i2}, \cdots, \gamma_{iq})^T \sim \mathcal{D}(\mathbf{0}_{q}, \boldsymbol{\Sigma}_{\boldsymbol{\gamma}}),
 \end{aligned}
 ```
@@ -64,12 +66,12 @@ where
 
 ```math
 \begin{aligned}
-\sigma_{\epsilon_{ij}}^2 = \exp (\textbf{w}_{ij}^T \boldsymbol{\tau} + \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega}^T \boldsymbol{\gamma_i} + \omega_i)  \text{,   }\omega_i \sim \mathcal{D}(0, \sigma_\omega^2)
+\sigma_{\epsilon_{ij}}^2 = \exp (\textbf{w}_{ij}^T \boldsymbol{\tau} + \boldsymbol{\ell}_{\boldsymbol{\gamma} \omega}^T \boldsymbol{\gamma_i} + \omega_i), \quad \omega_i \sim \mathcal{D}(0, \sigma_\omega^2)
 \end{aligned}
 ```
 
 represents the within-subject variance with $\boldsymbol{\ell}_{\gamma \omega}^T$ coming from the Cholesky factor of the covariance matrix of the joint distribution of random effects ($\boldsymbol{\gamma}_i$, $\omega_i$). 
-The joint distribution
+The joint distribution of random effects is
 
 ```math
 \begin{aligned}
@@ -106,9 +108,9 @@ where $\textbf{L}_{\boldsymbol{\gamma}}$ is a $q \times q$ upper triangular matr
 
 In Dzubuar et al's estimation, they assume all unspecified distributions above are Normal distributions. Our estimation procedure is robust and only needs that the mean and variance of those random variables hold. In their MixWILD software, they fit the model through maximum likelihood, requiring numerically intensive numerical integration. 
 
-We have derived a computationally efficient and statistically robust method for obtaining estimates of $\boldsymbol{\beta}, \boldsymbol{\tau}, \text{and}, \boldsymbol{\Sigma_\gamma}$. The mean fixed effects, $\boldsymbol{\beta}$ are estimates via weighted least squares, while the variance components $\boldsymbol{\tau}$ and $\boldsymbol{\Sigma_\gamma}$ are estimated via a weighted nonlinear least squares approach motivated by the method of moments estimation. We do not estimate any parameters associated with the random scale effect $\omega_i$ or any association between $\boldsymbol{\gamma}_i$ and $\omega_i$. These are treated as nuissance parameters that get absorbed into the estimation of the intercept of $\boldsymbol{\tau}$.
+We have derived a computationally efficient and statistically robust method for obtaining estimates of $\boldsymbol{\beta}, \boldsymbol{\tau}, \text{and}, \boldsymbol{\Sigma_\gamma}$. The mean fixed effects $\boldsymbol{\beta}$ are estimated by weighted least squares, while the variance components $\boldsymbol{\tau}$ and $\boldsymbol{\Sigma_\gamma}$ are estimated via a weighted nonlinear least squares approach motivated by the method of moments. WiSER does not estimate any parameters associated with the random scale effect $\omega_i$ or any association between $\boldsymbol{\gamma}_i$ and $\omega_i$. These are treated as nuissance parameters that get absorbed into the intercept of $\boldsymbol{\tau}$.
 
-**NOTE**: When the true data has a random scale effect with non-zero variance $\sigma^2_\omega$, WiSER's estimates of $\boldsymbol{\beta}$, non-intercept values of  $\boldsymbol{\tau}$, and, $\boldsymbol{\Sigma_\gamma}$ are consistent. In this case, the intercept of $\boldsymbol{\tau}$ absorbs effects from $\sigma^2_\omega$. 
+**NOTE**: When the true data has a random scale effect with non-zero variance $\sigma^2_\omega$, WiSER's estimates of $\boldsymbol{\beta}$, non-intercept values of  $\boldsymbol{\tau}$, and $\boldsymbol{\Sigma_\gamma}$ are consistent. In this case, the intercept of $\boldsymbol{\tau}$ absorbs effects from $\sigma^2_\omega$. 
 
 
 ```julia

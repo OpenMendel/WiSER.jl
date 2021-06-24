@@ -11,12 +11,12 @@ using CSV, DataFrames, WiSER
 
 ## Example data
 
-The example dataset, `sbp.csv`, is contained in `data` folder of the package. It is a simulated datatset with 500 individuals, each having 9~11 observations. The outcome, systolic blood pressure (SBP), is a function of other covariates. Below we read in the data as a `DataFrame` using the [CSV package](https://juliadata.github.io/CSV.jl). WiSER.jl can take other data table objects that comply with the `Tables.jl` format, such as `IndexedTables` from the [JuliaDB](https://github.com/JuliaData/JuliaDB.jl) package.
+The example dataset, `sbp.csv`, is contained in `data` folder of the package. It is a simulated datatset with 500 individuals, each having 9 to 11 observations. The outcome, systolic blood pressure (SBP), is a function of other covariates. Below we read in the data as a `DataFrame` using the [CSV package](https://juliadata.github.io/CSV.jl). WiSER.jl can take other data table objects that comply with the `Tables.jl` format, such as `IndexedTables` from the [JuliaDB](https://github.com/JuliaData/JuliaDB.jl) package.
 
 
 ```julia
 filepath = normpath(joinpath(dirname(pathof(WiSER)), "../data/"))
-df = DataFrame!(CSV.File(filepath * "sbp.csv"))
+df = DataFrame(CSV.File(filepath * "sbp.csv"));
 ```
 
 ```jldoctest
@@ -65,11 +65,11 @@ We will model sbp as a function of age, gender, and bmi_std. `bmi_std` is the ce
 
 $\text{sbp}_{ij} = \beta_0 + \beta_1 \text{agegroup}_{ij} + \beta_2 \text{gender}_{ij} + \beta_3 \text{bmi}_{ij} + \gamma_{i0} + \gamma_{i1}\text{bmi} + \epsilon_{ij}$
 
-``\epsilon_{ij}`` is distributed with mean 0 variance ``\sigma^2_{\epsilon_{ij}}``
+``\epsilon_{ij}`` has mean 0 and variance ``\sigma^2_{\epsilon_{ij}}``
 
 ``\gamma_{i} = (\gamma_{i0}, \gamma_{i1})`` has mean **0** and variance ``\Sigma_\gamma``
 
-$\sigma^2_{\epsilon_{ij}} = exp(\tau_0 + \tau_1 \text{agegroup}_{ij} + \tau_2 \text{gender}_{ij} + \tau_3 \text{bmi}_{ij})$
+$\sigma^2_{\epsilon_{ij}} = \exp(\tau_0 + \tau_1 \text{agegroup}_{ij} + \tau_2 \text{gender}_{ij} + \tau_3 \text{bmi}_{ij})$
 
 
 ```julia
@@ -103,11 +103,11 @@ WiSER.fit!(vlmm)
     ******************************************************************************
     This program contains Ipopt, a library for large-scale nonlinear optimization.
      Ipopt is released as open source code under the Eclipse Public License (EPL).
-             For more information visit http://projects.coin-or.org/Ipopt
+             For more information visit https://github.com/coin-or/Ipopt
     ******************************************************************************
     
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.416875
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.235812
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.211302
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.073275
 
 
 
@@ -115,6 +115,14 @@ WiSER.fit!(vlmm)
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -127,7 +135,7 @@ WiSER.fit!(vlmm)
     β3: gender: Male   10.0749      0.100279   100.47    <1e-99
     β4: bmi_std         0.296424    0.0139071   21.31    <1e-99
     β5: meds: OnMeds  -10.1107      0.122918   -82.26    <1e-99
-    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-9
+    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-09
     τ2: agegroup        1.50759     0.135456    11.13    <1e-28
     τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    <1e-11
     τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
@@ -150,16 +158,16 @@ coef(vlmm)
 
 
 
-    9-element Array{Float64,1}:
-     106.30828661757634
-      14.984423626293093
-      10.074886642511794
-       0.2964238570056941
-     -10.11067764854548
-      -2.5211956122840617
-       1.507588202998947
-      -0.4352249760929703
-       0.005269501831413487
+    9-element Vector{Float64}:
+     106.3082866175766
+      14.984423626293006
+      10.074886642511672
+       0.29642385700569635
+     -10.110677648545401
+      -2.5211956122840613
+       1.5075882029989467
+      -0.43522497609297117
+       0.005269501831413771
 
 
 
@@ -173,12 +181,12 @@ vlmm.β
 
 
 
-    5-element Array{Float64,1}:
-     106.30828661757634
-      14.984423626293093
-      10.074886642511794
-       0.2964238570056941
-     -10.11067764854548
+    5-element Vector{Float64}:
+     106.3082866175766
+      14.984423626293006
+      10.074886642511672
+       0.29642385700569635
+     -10.110677648545401
 
 
 
@@ -190,11 +198,11 @@ vlmm.τ
 
 
 
-    4-element Array{Float64,1}:
-     -2.5211956122840617
-      1.507588202998947
-     -0.4352249760929703
-      0.005269501831413487
+    4-element Vector{Float64}:
+     -2.5211956122840613
+      1.5075882029989467
+     -0.43522497609297117
+      0.005269501831413771
 
 
 
@@ -206,7 +214,7 @@ vlmm.Σγ
 
 
 
-    2×2 Array{Float64,2}:
+    2×2 Matrix{Float64}:
      1.00196    0.0181387
      0.0181387  0.000549357
 
@@ -222,7 +230,7 @@ vlmm.vcov
 
 
 
-    12×12 Array{Float64,2}:
+    12×12 Matrix{Float64}:
       0.0206899    -0.00753187   -0.00618382   …  -0.000123531   0.0644858
      -0.00753187    0.00400999    0.000152994      4.07896e-5   -0.0194226
      -0.00618382    0.000152994   0.0100558        4.35497e-5   -0.0299542
@@ -248,7 +256,7 @@ confint(vlmm)
 
 
 
-    9×2 Array{Float64,2}:
+    9×2 Matrix{Float64}:
      106.026      106.59
       14.8603      15.1085
        9.87834     10.2714
@@ -263,13 +271,14 @@ confint(vlmm)
 
 
 ```julia
+# 90% confidence interval
 confint(vlmm, 0.1)
 ```
 
 
 
 
-    9×2 Array{Float64,2}:
+    9×2 Matrix{Float64}:
      106.29       106.326
       14.9765      14.9924
       10.0623      10.0875
@@ -307,8 +316,8 @@ vlmm_bmi = WSVarLmmModel(
 WiSER.fit!(vlmm_bmi)
 ```
 
-    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.255484
-    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.411095
+    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.075083
+    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.122552
 
 
 
@@ -316,6 +325,14 @@ WiSER.fit!(vlmm_bmi)
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -351,9 +368,9 @@ Increasing `runs` (default is 2) takes more computing resources but can be usefu
 WiSER.fit!(vlmm_bmi, runs=3)
 ```
 
-    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.850399
-    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 1.060520
-    run = 3, ‖Δβ‖ = 0.008059, ‖Δτ‖ = 0.099534, ‖ΔL‖ = 0.696869, status = Optimal, time(s) = 1.127406
+    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.079402
+    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.121391
+    run = 3, ‖Δβ‖ = 0.008059, ‖Δτ‖ = 0.000678, ‖ΔL‖ = 0.083976, status = Optimal, time(s) = 0.154890
 
 
 
@@ -361,26 +378,34 @@ WiSER.fit!(vlmm_bmi, runs=3)
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
     Fixed-effects parameters:
-    ─────────────────────────────────────────────────────────────
-                           Estimate  Std. Error       Z  Pr(>|Z|)
-    ─────────────────────────────────────────────────────────────
-    β1: (Intercept)   100.139         0.315745   317.15    <1e-99
-    β2: agegroup       14.9839        0.0633172  236.65    <1e-99
-    β3: gender: Male   10.0753        0.10027    100.48    <1e-99
-    β4: bmi             0.246528      0.0114083   21.61    <1e-99
-    β5: meds: OnMeds  -10.1109        0.122778   -82.35    <1e-99
-    τ1: (Intercept)    -2.53158       0.866855    -2.92    0.0035
-    τ2: agegroup        1.50917       0.031734    47.56    <1e-99
-    τ3: meds: OnMeds   -0.436745      0.0513571   -8.50    <1e-16
-    τ4: bmi             0.000277851   0.0363866    0.01    0.9939
-    ─────────────────────────────────────────────────────────────
+    ────────────────────────────────────────────────────────────
+                          Estimate  Std. Error       Z  Pr(>|Z|)
+    ────────────────────────────────────────────────────────────
+    β1: (Intercept)   100.139        0.315745   317.15    <1e-99
+    β2: agegroup       14.9839       0.0633172  236.65    <1e-99
+    β3: gender: Male   10.0753       0.10027    100.48    <1e-99
+    β4: bmi             0.246528     0.0114083   21.61    <1e-99
+    β5: meds: OnMeds  -10.1109       0.122778   -82.35    <1e-99
+    τ1: (Intercept)    -2.63079      0.453424    -5.80    <1e-08
+    τ2: agegroup        1.5079       0.0253371   59.51    <1e-99
+    τ3: meds: OnMeds   -0.435791     0.051245    -8.50    <1e-16
+    τ4: bmi             0.00436541   0.0178825    0.24    0.8071
+    ────────────────────────────────────────────────────────────
     Random effects covariance matrix Σγ:
-     "γ1: (Intercept)"  3.48717e-48  7.26846e-26
-     "γ2: bmi"          7.26846e-26  0.00155716
+     "γ1: (Intercept)"  0.377439    0.00949012
+     "γ2: bmi"          0.00949012  0.000238614
     
 
 
@@ -396,8 +421,8 @@ A different solver may remedy the issue. By default, `WiSER.jl` uses the [Ipopt]
 WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100))
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.212217
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.222246
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.073956
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.069383
 
 
 
@@ -405,6 +430,14 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigge
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -417,7 +450,7 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigge
     β3: gender: Male   10.0749      0.100279   100.47    <1e-99
     β4: bmi_std         0.296424    0.0139071   21.31    <1e-99
     β5: meds: OnMeds  -10.1107      0.122918   -82.26    <1e-99
-    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-9
+    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-09
     τ2: agegroup        1.50759     0.135456    11.13    <1e-28
     τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    <1e-11
     τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
@@ -436,7 +469,7 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigge
 WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm_start_init_point="yes"))
 ```
 
-    This is Ipopt version 3.13.2, running with linear solver mumps.
+    This is Ipopt version 3.13.4, running with linear solver mumps.
     NOTE: Other linear solvers might be more efficient (see Ipopt documentation).
     
     Number of nonzeros in equality constraint Jacobian...:        0
@@ -468,11 +501,11 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     Number of Iterations....: 9
     
                                        (scaled)                 (unscaled)
-    Objective...............:   1.6226171160601309e+04    2.8311697021847416e+04
-    Dual infeasibility......:   5.2065403612135009e-09    9.0844594069494633e-09
+    Objective...............:   1.6226171160602307e+04    2.8311697021847336e+04
+    Dual infeasibility......:   5.2103428765066918e-09    9.0910940997446232e-09
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
     Complementarity.........:   0.0000000000000000e+00    0.0000000000000000e+00
-    Overall NLP error.......:   5.2065403612135009e-09    9.0844594069494633e-09
+    Overall NLP error.......:   5.2103428765066918e-09    9.0910940997446232e-09
     
     
     Number of objective function evaluations             = 10
@@ -482,12 +515,12 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 9
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.013
-    Total CPU secs in NLP function evaluations           =      0.182
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.015
+    Total CPU secs in NLP function evaluations           =      0.087
     
     EXIT: Optimal Solution Found.
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.201498
-    This is Ipopt version 3.13.2, running with linear solver mumps.
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.077676
+    This is Ipopt version 3.13.4, running with linear solver mumps.
     NOTE: Other linear solvers might be more efficient (see Ipopt documentation).
     
     Number of nonzeros in equality constraint Jacobian...:        0
@@ -521,11 +554,11 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     Number of Iterations....: 10
     
                                        (scaled)                 (unscaled)
-    Objective...............:   2.7170011141755807e+04    2.7170011141755807e+04
-    Dual infeasibility......:   4.6825319177656866e-09    4.6825319177656866e-09
+    Objective...............:   2.7170011141755771e+04    2.7170011141755771e+04
+    Dual infeasibility......:   4.6827675070915120e-09    4.6827675070915120e-09
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
     Complementarity.........:   0.0000000000000000e+00    0.0000000000000000e+00
-    Overall NLP error.......:   4.6825319177656866e-09    4.6825319177656866e-09
+    Overall NLP error.......:   4.6827675070915120e-09    4.6827675070915120e-09
     
     
     Number of objective function evaluations             = 11
@@ -535,11 +568,11 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 10
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.014
-    Total CPU secs in NLP function evaluations           =      0.201
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.008
+    Total CPU secs in NLP function evaluations           =      0.055
     
     EXIT: Optimal Solution Found.
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.220485
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.066314
 
 
 
@@ -547,6 +580,14 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -559,7 +600,7 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     β3: gender: Male   10.0749      0.100279   100.47    <1e-99
     β4: bmi_std         0.296424    0.0139071   21.31    <1e-99
     β5: meds: OnMeds  -10.1107      0.122918   -82.26    <1e-99
-    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-9
+    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-09
     τ2: agegroup        1.50759     0.135456    11.13    <1e-28
     τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    <1e-11
     τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
@@ -585,8 +626,8 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
 WiSER.fit!(vlmm, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.162196, ‖ΔL‖ = 0.100050, status = Optimal, time(s) = 0.571036
-    run = 2, ‖Δβ‖ = 0.005248, ‖Δτ‖ = 0.008742, ‖ΔL‖ = 0.001334, status = Optimal, time(s) = 0.185684
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.162196, ‖ΔL‖ = 0.100050, status = Optimal, time(s) = 0.143649
+    run = 2, ‖Δβ‖ = 0.005248, ‖Δτ‖ = 0.008747, ‖ΔL‖ = 0.001335, status = Optimal, time(s) = 0.049118
 
 
 
@@ -594,26 +635,34 @@ WiSER.fit!(vlmm, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
     Fixed-effects parameters:
-    ────────────────────────────────────────────────────────────
-                          Estimate  Std. Error       Z  Pr(>|Z|)
-    ────────────────────────────────────────────────────────────
-    β1: (Intercept)   106.308        0.14384    739.07    <1e-99
-    β2: agegroup       14.9844       0.0633238  236.63    <1e-99
-    β3: gender: Male   10.0749       0.100277   100.47    <1e-99
-    β4: bmi_std         0.296421     0.0139114   21.31    <1e-99
-    β5: meds: OnMeds  -10.1106       0.122912   -82.26    <1e-99
-    τ1: (Intercept)    -2.53263      0.102706   -24.66    <1e-99
-    τ2: agegroup        1.51161      0.0388869   38.87    <1e-99
-    τ3: meds: OnMeds   -0.435897     0.0524849   -8.31    <1e-16
-    τ4: bmi_std         0.00576945   0.0218517    0.26    0.7918
-    ────────────────────────────────────────────────────────────
+    ───────────────────────────────────────────────────────────
+                         Estimate  Std. Error       Z  Pr(>|Z|)
+    ───────────────────────────────────────────────────────────
+    β1: (Intercept)   106.308       0.14384    739.07    <1e-99
+    β2: agegroup       14.9844      0.0633238  236.63    <1e-99
+    β3: gender: Male   10.0749      0.100277   100.47    <1e-99
+    β4: bmi_std         0.296421    0.0139114   21.31    <1e-99
+    β5: meds: OnMeds  -10.1106      0.122912   -82.26    <1e-99
+    τ1: (Intercept)    -2.53263     0.102707   -24.66    <1e-99
+    τ2: agegroup        1.51161     0.038887    38.87    <1e-99
+    τ3: meds: OnMeds   -0.435901    0.0524849   -8.31    <1e-16
+    τ4: bmi_std         0.0057698   0.0218516    0.26    0.7917
+    ───────────────────────────────────────────────────────────
     Random effects covariance matrix Σγ:
      "γ1: (Intercept)"  1.00228    0.0179118
-     "γ2: bmi_std"      0.0179118  0.00441753
+     "γ2: bmi_std"      0.0179118  0.00441744
     
 
 
@@ -627,8 +676,8 @@ Using a different solver can even help without the need for standardizing predic
 WiSER.fit!(vlmm_bmi, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
 ```
 
-    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.139300, ‖ΔL‖ = 1.629470, status = Optimal, time(s) = 1.877337
-    run = 2, ‖Δβ‖ = 0.028303, ‖Δτ‖ = 0.000130, ‖ΔL‖ = 0.000415, status = Optimal, time(s) = 0.188945
+    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.143776, ‖ΔL‖ = 1.528229, status = Optimal, time(s) = 0.518102
+    run = 2, ‖Δβ‖ = 0.026830, ‖Δτ‖ = 0.000125, ‖ΔL‖ = 0.000257, status = Optimal, time(s) = 0.038174
 
 
 
@@ -636,6 +685,14 @@ WiSER.fit!(vlmm_bmi, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -643,19 +700,19 @@ WiSER.fit!(vlmm_bmi, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
     ───────────────────────────────────────────────────────────
                          Estimate  Std. Error       Z  Pr(>|Z|)
     ───────────────────────────────────────────────────────────
-    β1: (Intercept)   100.127       0.322948   310.04    <1e-99
-    β2: agegroup       14.9849      0.0633315  236.61    <1e-99
-    β3: gender: Male   10.0749      0.100294   100.45    <1e-99
-    β4: bmi             0.24691     0.0116922   21.12    <1e-98
-    β5: meds: OnMeds  -10.1094      0.123008   -82.19    <1e-99
-    τ1: (Intercept)    -3.02804     0.861523    -3.51    0.0004
-    τ2: agegroup        1.51038     0.0624133   24.20    <1e-99
-    τ3: meds: OnMeds   -0.42692     0.0525523   -8.12    <1e-15
-    τ4: bmi             0.0197105   0.0408088    0.48    0.6291
+    β1: (Intercept)   100.126       0.323755   309.26    <1e-99
+    β2: agegroup       14.9849      0.0633317  236.61    <1e-99
+    β3: gender: Male   10.0748      0.10029    100.46    <1e-99
+    β4: bmi             0.246967    0.0117298   21.05    <1e-97
+    β5: meds: OnMeds  -10.1094      0.122977   -82.21    <1e-99
+    τ1: (Intercept)    -3.01501     0.811039    -3.72    0.0002
+    τ2: agegroup        1.50948     0.0468194   32.24    <1e-99
+    τ3: meds: OnMeds   -0.426979    0.0519209   -8.22    <1e-15
+    τ4: bmi             0.0192299   0.0368267    0.52    0.6016
     ───────────────────────────────────────────────────────────
     Random effects covariance matrix Σγ:
-     "γ1: (Intercept)"   3.50514   -0.111303
-     "γ2: bmi"          -0.111303   0.00490597
+     "γ1: (Intercept)"   3.89413   -0.127903
+     "γ2: bmi"          -0.127903   0.00561294
     
 
 
@@ -671,8 +728,8 @@ Initialization matters as well. By default, `fit!` uses a crude least squares es
 WiSER.fit!(vlmm, init = init_mom!(vlmm))
 ```
 
-    run = 1, ‖Δβ‖ = 0.036245, ‖Δτ‖ = 0.188207, ‖ΔL‖ = 0.127483, status = Optimal, time(s) = 0.256069
-    run = 2, ‖Δβ‖ = 0.006798, ‖Δτ‖ = 0.009128, ‖ΔL‖ = 0.050049, status = Optimal, time(s) = 0.340028
+    run = 1, ‖Δβ‖ = 0.036245, ‖Δτ‖ = 0.188207, ‖ΔL‖ = 0.127483, status = Optimal, time(s) = 0.061371
+    run = 2, ‖Δβ‖ = 0.006798, ‖Δτ‖ = 0.009128, ‖ΔL‖ = 0.050049, status = Optimal, time(s) = 0.089574
 
 
 
@@ -680,6 +737,14 @@ WiSER.fit!(vlmm, init = init_mom!(vlmm))
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -715,8 +780,8 @@ vlmm.Lγ .= [1.0 0.0; 0.0 0.0]
 fit!(vlmm, init = vlmm)
 ```
 
-    run = 1, ‖Δβ‖ = 0.337743, ‖Δτ‖ = 0.069850, ‖ΔL‖ = 0.017323, status = Optimal, time(s) = 0.196880
-    run = 2, ‖Δβ‖ = 0.003050, ‖Δτ‖ = 0.004463, ‖ΔL‖ = 0.001185, status = Optimal, time(s) = 0.222161
+    run = 1, ‖Δβ‖ = 0.337743, ‖Δτ‖ = 0.069850, ‖ΔL‖ = 0.017323, status = Optimal, time(s) = 0.091231
+    run = 2, ‖Δβ‖ = 0.003050, ‖Δτ‖ = 0.004463, ‖ΔL‖ = 0.001185, status = Optimal, time(s) = 0.110319
 
 
 
@@ -724,6 +789,14 @@ fit!(vlmm, init = vlmm)
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -790,15 +863,8 @@ To parallelize the objective function in WiSER, simply add the keyword argument 
 WiSER.fit!(vlmm, parallel = true)
 ```
 
-    
-    ******************************************************************************
-    This program contains Ipopt, a library for large-scale nonlinear optimization.
-     Ipopt is released as open source code under the Eclipse Public License (EPL).
-             For more information visit http://projects.coin-or.org/Ipopt
-    ******************************************************************************
-    
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.388894
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.181731
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.250904
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.167102
 
 
 
@@ -806,6 +872,14 @@ WiSER.fit!(vlmm, parallel = true)
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -818,7 +892,7 @@ WiSER.fit!(vlmm, parallel = true)
     β3: gender: Male   10.0749      0.100279   100.47    <1e-99
     β4: bmi_std         0.296424    0.0139071   21.31    <1e-99
     β5: meds: OnMeds  -10.1107      0.122918   -82.26    <1e-99
-    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-9
+    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-09
     τ2: agegroup        1.50759     0.135456    11.13    <1e-28
     τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    <1e-11
     τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
@@ -838,9 +912,9 @@ We can see slight timing differences at this sample size:
 @time WiSER.fit!(vlmm, parallel = false);
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.217896
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.224410
-      0.455338 seconds (998 allocations: 53.172 KiB)
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.074524
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.084252
+      0.164991 seconds (417 allocations: 38.531 KiB)
 
 
 
@@ -848,9 +922,9 @@ We can see slight timing differences at this sample size:
 @time WiSER.fit!(vlmm, parallel = true);
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.192498
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.181518
-      0.385989 seconds (2.53 k allocations: 228.031 KiB)
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.174105
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.180220
+      0.366986 seconds (1.95 k allocations: 174.438 KiB)
 
 
 ### Observation Weights
@@ -870,9 +944,9 @@ vlmm_wts = WSVarLmmModel(
 @time WiSER.fit!(vlmm_wts)
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.158033, ‖ΔL‖ = 0.102058, status = Optimal, time(s) = 0.203535
-    run = 2, ‖Δβ‖ = 0.006134, ‖Δτ‖ = 0.007594, ‖ΔL‖ = 0.056873, status = Optimal, time(s) = 0.284779
-      0.501394 seconds (1.01 k allocations: 54.703 KiB)
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.158033, ‖ΔL‖ = 0.102058, status = Optimal, time(s) = 0.061637
+    run = 2, ‖Δβ‖ = 0.006134, ‖Δτ‖ = 0.007594, ‖ΔL‖ = 0.056873, status = Optimal, time(s) = 0.086043
+      0.153874 seconds (447 allocations: 40.500 KiB)
 
 
 
@@ -880,6 +954,14 @@ vlmm_wts = WSVarLmmModel(
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     

@@ -6,7 +6,7 @@ The `rand!(m::WSVarLmmModel; respdist = MvNormal, γωdist = MvNormal, Σγω = 
 
 - The data in the model object's data `X, Z, W` matrices. 
 - The parameter values in the model.
-- The condistribution distribution of the response given the random effects.
+- The conditional distribution of the response given the random effects.
 - The distribution of the random effects.
 - If simulating from MvTDistribution, you must specify the degrees of freedom via `df = x`.
 
@@ -49,7 +49,7 @@ We can start by loading the pacakges, data, and fitting a model.
 ```julia
 using CSV, DataFrames, Random, WiSER
 filepath = normpath(joinpath(dirname(pathof(WiSER)), "../data/"))
-df = DataFrame!(CSV.File(filepath * "sbp.csv"))
+df = DataFrame(CSV.File(filepath * "sbp.csv"))
 vlmm = WSVarLmmModel(
     @formula(sbp ~ 1 + agegroup + gender + bmi_std + meds), 
     @formula(sbp ~ 1 + bmi_std), 
@@ -62,11 +62,11 @@ WiSER.fit!(vlmm)
     ******************************************************************************
     This program contains Ipopt, a library for large-scale nonlinear optimization.
      Ipopt is released as open source code under the Eclipse Public License (EPL).
-             For more information visit http://projects.coin-or.org/Ipopt
+             For more information visit https://github.com/coin-or/Ipopt
     ******************************************************************************
     
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.376659
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.234782
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.215811
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.083461
 
 
 
@@ -74,6 +74,14 @@ WiSER.fit!(vlmm)
 
     
     Within-subject variance estimation by robust regression (WiSER)
+    
+    Mean Formula:
+    sbp ~ 1 + agegroup + gender + bmi_std + meds
+    Random Effects Formula:
+    sbp ~ 1 + bmi_std
+    Within-Subject Variance Formula:
+    sbp ~ 1 + agegroup + meds + bmi_std
+    
     Number of individuals/clusters: 500
     Total observations: 5011
     
@@ -86,7 +94,7 @@ WiSER.fit!(vlmm)
     β3: gender: Male   10.0749      0.100279   100.47    <1e-99
     β4: bmi_std         0.296424    0.0139071   21.31    <1e-99
     β5: meds: OnMeds  -10.1107      0.122918   -82.26    <1e-99
-    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-9
+    τ1: (Intercept)    -2.5212      0.393792    -6.40    <1e-09
     τ2: agegroup        1.50759     0.135456    11.13    <1e-28
     τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    <1e-11
     τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
@@ -112,7 +120,7 @@ WiSER.rand!(vlmm; respdist = MvNormal)
 
 
 
-    9×2 Array{Float64,2}:
+    9×2 Matrix{Float64}:
      159.586  163.223
      161.849  161.898
      160.484  160.667
@@ -135,7 +143,7 @@ respdists()
 
 
 
-    6-element Array{Symbol,1}:
+    6-element Vector{Symbol}:
      :MvNormal
      :MvTDist
      :Gamma
@@ -154,16 +162,16 @@ vlmm.data[1].y
 
 
 
-    9-element Array{Float64,1}:
-     167.83510676083995
-     161.04081244800372
-     161.88509094798928
-     162.76369002769596
-     168.02717792311043
-     164.52117964053977
-     162.84533339184907
-     162.54354236314282
-     163.87154251671376
+    9-element Vector{Float64}:
+     163.1357991396798
+     165.1430739396795
+     162.08532565729797
+     159.6822122192519
+     161.57688777672846
+     164.58912923247945
+     157.98192168704628
+     164.12521616207954
+     163.73003300792996
 
 
 
@@ -191,13 +199,13 @@ rvarlmm!(f1, f2, f3, :id, df, β, τ;
 
 
 
-    7×2 Array{Float64,2}:
-      1.54783   -1.13623
-      0.365508  -2.03964
-     -0.31447   -3.0298
-     -0.291651   0.79679
-      1.0763     1.12252
-     -0.672566   1.25175
-     -0.70343    0.34088
+    7×2 Matrix{Float64}:
+     -0.474718   0.0945213
+     -0.615475   2.06463
+     -0.577114   3.7559
+     -1.14809    1.66547
+     -0.53171   -0.250939
+      1.26381   -0.400644
+     -1.32798   -1.67888
 
 
