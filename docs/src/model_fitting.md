@@ -64,9 +64,9 @@ We will model sbp as a function of age, gender, and bmi_std. `bmi_std` is the ce
 
 $\text{sbp}_{ij} = \beta_0 + \beta_1 \text{agegroup}_{ij} + \beta_2 \text{gender}_{ij} + \beta_3 \text{bmi}_{ij} + \gamma_{i0} + \gamma_{i1}\text{bmi} + \epsilon_{ij}$
 
-$\epsilon_{ij}$ is distributed with mean 0 variance $\sigma^2_{\epsilon_{ij}}$
+``\epsilon_{ij}`` is distributed with mean 0 variance ``\sigma^2_{\epsilon_{ij}}``
 
-$\gamma_{i} = (\gamma_{i0}, \gamma_{i1})$ has mean **0** and variance $\Sigma_\gamma$
+``\gamma_{i} = (\gamma_{i0}, \gamma_{i1})`` has mean **0** and variance ``\Sigma_\gamma``
 
 $\sigma^2_{\epsilon_{ij}} = exp(\tau_0 + \tau_1 \text{agegroup}_{ij} + \tau_2 \text{gender}_{ij} + \tau_3 \text{bmi}_{ij})$
 
