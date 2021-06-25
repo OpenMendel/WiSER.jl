@@ -17,7 +17,7 @@ Use the backspace key to return to the Julia REPL.
 WiSER was created to efficiently estimate effects of covarariates on within-subject (WS) variability in logitudinal data. The following graphic depicts the motiviation for WiSER and what it can model.
 
 <p align="center">
-  <img src="./wisermotivation.png" height="300" width="500">
+  <img src="https://raw.githubusercontent.com/OpenMendel/WiSER.jl/master/docs/src/notebooks/wisermotivation.png" height="300" width="500">
 </p>
 
 The figure above displays systolic blood pressure (SBP) measured for two patients followed up over 40-visits. At baseline, we see a difference in both mean and variability of SBP between the two patients. After the 20th visit, patient 1 goes on blood pressure medication and their mean and WS variance of SBP more similarly match patient 2's. It can be of clinical importance to model what factors associated with these baseline differences in mean and WS variance as well as how being on medication (a time-varying covariate) affects these measures. WiSER is able to simultaneously model (time-invariant and time-varying) covariates' effects on mean and within-subject variability of longitudinal traits. 
@@ -27,7 +27,7 @@ The mean fixed effects are estimated in $\boldsymbol{\beta}$, the within-subject
 
 ## Model Details 
 
-In addition to mean levels, it can be important to model factors influencing within-subject variability of longitudinal outcomes. We utilize a modified linear mixed effects model that allows for within-subject variability to be modeled through covariates. It is motivated by a [Mixed Effects Multiple Location Scale Model introduced by Dzubar et al. (2020)](https://link.springer.com/article/10.3758/s13428-019-01322-1), but WiSER dispenses with the normal assumptions and is much faster that the likelihood method implemented in the [MixWILD](https://reach-lab.github.io/MixWildGUI/) software.
+In addition to mean levels, it can be important to model factors influencing within-subject variability of longitudinal outcomes. We utilize a modified linear mixed effects model that allows for within-subject variability to be modeled through covariates. It is motivated by a Mixed Effects Multiple Location Scale Model introduced by [Dzubar et al. (2020)](https://link.springer.com/article/10.3758/s13428-019-01322-1), but WiSER dispenses with the normal assumptions and is much faster than the likelihood method implemented in the [MixWILD](https://reach-lab.github.io/MixWildGUI/) software.
 
 The procedure assumes the following model for the data:
 

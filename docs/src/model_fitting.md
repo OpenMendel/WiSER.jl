@@ -63,13 +63,13 @@ WSVarLmmModel
 We will model sbp as a function of age, gender, and bmi_std. `bmi_std` is the centered and scaled `bmi`. The following commands fit the following model:
 
 
-$\text{sbp}_{ij} = \beta_0 + \beta_1 \text{agegroup}_{ij} + \beta_2 \text{gender}_{ij} + \beta_3 \text{bmi}_{ij} + \gamma_{i0} + \gamma_{i1}\text{bmi} + \epsilon_{ij}$
+$\text{sbp}_{ij} = \beta_0 + \beta_1 \cdot \text{agegroup}_{ij} + \beta_2 \cdot \text{gender}_{i} + \beta_3 \cdot \text{bmi}_{ij} + \gamma_{i0} + \gamma_{i1} \cdot \text{bmi} + \epsilon_{ij}$
 
 ``\epsilon_{ij}`` has mean 0 and variance ``\sigma^2_{\epsilon_{ij}}``
 
 ``\gamma_{i} = (\gamma_{i0}, \gamma_{i1})`` has mean **0** and variance ``\Sigma_\gamma``
 
-$\sigma^2_{\epsilon_{ij}} = \exp(\tau_0 + \tau_1 \text{agegroup}_{ij} + \tau_2 \text{gender}_{ij} + \tau_3 \text{bmi}_{ij})$
+$\sigma^2_{\epsilon_{ij}} = \exp(\tau_0 + \tau_1 \cdot \text{agegroup}_{ij} + \tau_2 \cdot \text{gender}_{i} + \tau_3 \cdot \text{bmi}_{ij})$
 
 
 ```julia
@@ -106,8 +106,8 @@ WiSER.fit!(vlmm)
              For more information visit https://github.com/coin-or/Ipopt
     ******************************************************************************
     
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.211302
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.073275
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.224952
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.079816
 
 
 
@@ -316,8 +316,8 @@ vlmm_bmi = WSVarLmmModel(
 WiSER.fit!(vlmm_bmi)
 ```
 
-    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.075083
-    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.122552
+    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.101908
+    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.146615
 
 
 
@@ -368,9 +368,9 @@ Increasing `runs` (default is 2) takes more computing resources but can be usefu
 WiSER.fit!(vlmm_bmi, runs=3)
 ```
 
-    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.079402
-    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.121391
-    run = 3, ‖Δβ‖ = 0.008059, ‖Δτ‖ = 0.000678, ‖ΔL‖ = 0.083976, status = Optimal, time(s) = 0.154890
+    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.090405
+    run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.146857
+    run = 3, ‖Δβ‖ = 0.008059, ‖Δτ‖ = 0.000678, ‖ΔL‖ = 0.083976, status = Optimal, time(s) = 0.176042
 
 
 
@@ -421,8 +421,8 @@ A different solver may remedy the issue. By default, `WiSER.jl` uses the [Ipopt]
 WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100))
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.073956
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.069383
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.095702
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.082792
 
 
 
@@ -515,11 +515,11 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 9
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.015
-    Total CPU secs in NLP function evaluations           =      0.087
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.009
+    Total CPU secs in NLP function evaluations           =      0.063
     
     EXIT: Optimal Solution Found.
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.077676
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.090033
     This is Ipopt version 3.13.4, running with linear solver mumps.
     NOTE: Other linear solvers might be more efficient (see Ipopt documentation).
     
@@ -568,11 +568,11 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 10
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.008
-    Total CPU secs in NLP function evaluations           =      0.055
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.009
+    Total CPU secs in NLP function evaluations           =      0.069
     
     EXIT: Optimal Solution Found.
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.066314
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.083170
 
 
 
@@ -626,8 +626,8 @@ WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm="yes", warm
 WiSER.fit!(vlmm, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.162196, ‖ΔL‖ = 0.100050, status = Optimal, time(s) = 0.143649
-    run = 2, ‖Δβ‖ = 0.005248, ‖Δτ‖ = 0.008747, ‖ΔL‖ = 0.001335, status = Optimal, time(s) = 0.049118
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.162196, ‖ΔL‖ = 0.100050, status = Optimal, time(s) = 0.180298
+    run = 2, ‖Δβ‖ = 0.005248, ‖Δτ‖ = 0.008747, ‖ΔL‖ = 0.001335, status = Optimal, time(s) = 0.062869
 
 
 
@@ -676,8 +676,8 @@ Using a different solver can even help without the need for standardizing predic
 WiSER.fit!(vlmm_bmi, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))
 ```
 
-    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.143776, ‖ΔL‖ = 1.528229, status = Optimal, time(s) = 0.518102
-    run = 2, ‖Δβ‖ = 0.026830, ‖Δτ‖ = 0.000125, ‖ΔL‖ = 0.000257, status = Optimal, time(s) = 0.038174
+    run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.143776, ‖ΔL‖ = 1.528229, status = Optimal, time(s) = 0.599344
+    run = 2, ‖Δβ‖ = 0.026830, ‖Δτ‖ = 0.000125, ‖ΔL‖ = 0.000257, status = Optimal, time(s) = 0.045167
 
 
 
@@ -728,8 +728,8 @@ Initialization matters as well. By default, `fit!` uses a crude least squares es
 WiSER.fit!(vlmm, init = init_mom!(vlmm))
 ```
 
-    run = 1, ‖Δβ‖ = 0.036245, ‖Δτ‖ = 0.188207, ‖ΔL‖ = 0.127483, status = Optimal, time(s) = 0.061371
-    run = 2, ‖Δβ‖ = 0.006798, ‖Δτ‖ = 0.009128, ‖ΔL‖ = 0.050049, status = Optimal, time(s) = 0.089574
+    run = 1, ‖Δβ‖ = 0.036245, ‖Δτ‖ = 0.188207, ‖ΔL‖ = 0.127483, status = Optimal, time(s) = 0.071294
+    run = 2, ‖Δβ‖ = 0.006798, ‖Δτ‖ = 0.009128, ‖ΔL‖ = 0.050049, status = Optimal, time(s) = 0.074553
 
 
 
@@ -780,8 +780,8 @@ vlmm.Lγ .= [1.0 0.0; 0.0 0.0]
 fit!(vlmm, init = vlmm)
 ```
 
-    run = 1, ‖Δβ‖ = 0.337743, ‖Δτ‖ = 0.069850, ‖ΔL‖ = 0.017323, status = Optimal, time(s) = 0.091231
-    run = 2, ‖Δβ‖ = 0.003050, ‖Δτ‖ = 0.004463, ‖ΔL‖ = 0.001185, status = Optimal, time(s) = 0.110319
+    run = 1, ‖Δβ‖ = 0.337743, ‖Δτ‖ = 0.069850, ‖ΔL‖ = 0.017323, status = Optimal, time(s) = 0.086564
+    run = 2, ‖Δβ‖ = 0.003050, ‖Δτ‖ = 0.004463, ‖ΔL‖ = 0.001185, status = Optimal, time(s) = 0.119924
 
 
 
@@ -863,8 +863,8 @@ To parallelize the objective function in WiSER, simply add the keyword argument 
 WiSER.fit!(vlmm, parallel = true)
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.250904
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.167102
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.252997
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.163149
 
 
 
@@ -912,9 +912,9 @@ We can see slight timing differences at this sample size:
 @time WiSER.fit!(vlmm, parallel = false);
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.074524
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.084252
-      0.164991 seconds (417 allocations: 38.531 KiB)
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.073978
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.073768
+      0.154402 seconds (417 allocations: 38.531 KiB)
 
 
 
@@ -922,9 +922,9 @@ We can see slight timing differences at this sample size:
 @time WiSER.fit!(vlmm, parallel = true);
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.174105
-    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.180220
-      0.366986 seconds (1.95 k allocations: 174.438 KiB)
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.149863
+    run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.160531
+      0.320468 seconds (1.95 k allocations: 174.406 KiB)
 
 
 ### Observation Weights
@@ -944,9 +944,9 @@ vlmm_wts = WSVarLmmModel(
 @time WiSER.fit!(vlmm_wts)
 ```
 
-    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.158033, ‖ΔL‖ = 0.102058, status = Optimal, time(s) = 0.061637
-    run = 2, ‖Δβ‖ = 0.006134, ‖Δτ‖ = 0.007594, ‖ΔL‖ = 0.056873, status = Optimal, time(s) = 0.086043
-      0.153874 seconds (447 allocations: 40.500 KiB)
+    run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.158033, ‖ΔL‖ = 0.102058, status = Optimal, time(s) = 0.068318
+    run = 2, ‖Δβ‖ = 0.006134, ‖Δτ‖ = 0.007594, ‖ΔL‖ = 0.056873, status = Optimal, time(s) = 0.090557
+      0.165079 seconds (447 allocations: 40.500 KiB)
 
 
 
