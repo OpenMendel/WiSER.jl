@@ -542,11 +542,11 @@ version = "1.2.0"
 
 [[WiSER]]
 deps = ["CategoricalArrays", "DataFrames", "Distributions", "Ipopt", "LinearAlgebra", "MathProgBase", "NLopt", "Printf", "Reexport", "Statistics", "StatsBase", "StatsModels", "Tables"]
-git-tree-sha1 = "1c259f3a08084aca0506b799058519c08cbd65d3"
+git-tree-sha1 = "fad7f20e275271edd34ba9f141bfe809ef27bb29"
 repo-rev = "master"
 repo-url = "https://github.com/OpenMendel/WiSER.jl"
 uuid = "2ff19380-1883-49fc-9d10-450face6b90c"
-version = "0.0.2"
+version = "0.1.0"
 
 [[ZMQ]]
 deps = ["FileWatching", "Sockets", "ZeroMQ_jll"]
