@@ -16,9 +16,7 @@ Use the backspace key to return to the Julia REPL.
 
 WiSER was created to efficiently estimate effects of covarariates on within-subject (WS) variability in logitudinal data. The following graphic depicts the motiviation for WiSER and what it can model.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/OpenMendel/WiSER.jl/master/docs/src/notebooks/wisermotivation.png" height="300" width="500">
-</p>
+<img src="https://raw.githubusercontent.com/OpenMendel/WiSER.jl/master/docs/src/notebooks/wisermotivation.png" height="300" width="500"/>
 
 The figure above displays systolic blood pressure (SBP) measured for two patients followed up over 40-visits. At baseline, we see a difference in both mean and variability of SBP between the two patients. After the 20th visit, patient 1 goes on blood pressure medication and their mean and WS variance of SBP more similarly match patient 2's. It can be of clinical importance to model what factors associated with these baseline differences in mean and WS variance as well as how being on medication (a time-varying covariate) affects these measures. WiSER is able to simultaneously model (time-invariant and time-varying) covariates' effects on mean and within-subject variability of longitudinal traits. 
 
@@ -111,8 +109,3 @@ In Dzubuar et al's estimation, they assume all unspecified distributions above a
 We have derived a computationally efficient and statistically robust method for obtaining estimates of $\boldsymbol{\beta}, \boldsymbol{\tau}, \text{and}, \boldsymbol{\Sigma_\gamma}$. The mean fixed effects $\boldsymbol{\beta}$ are estimated by weighted least squares, while the variance components $\boldsymbol{\tau}$ and $\boldsymbol{\Sigma_\gamma}$ are estimated via a weighted nonlinear least squares approach motivated by the method of moments. WiSER does not estimate any parameters associated with the random scale effect $\omega_i$ or any association between $\boldsymbol{\gamma}_i$ and $\omega_i$. These are treated as nuissance parameters that get absorbed into the intercept of $\boldsymbol{\tau}$.
 
 **NOTE**: When the true data has a random scale effect with non-zero variance $\sigma^2_\omega$, WiSER's estimates of $\boldsymbol{\beta}$, non-intercept values of  $\boldsymbol{\tau}$, and $\boldsymbol{\Sigma_\gamma}$ are consistent. In this case, the intercept of $\boldsymbol{\tau}$ absorbs effects from $\sigma^2_\omega$. 
-
-
-```julia
-
-```
