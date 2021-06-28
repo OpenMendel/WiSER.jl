@@ -8,9 +8,10 @@ using LinearAlgebra, Profile, Random, Test, WiSER
 @info "Normal Normal LogNormal Test"
 @info "generate data"
 Random.seed!(123)
+rng = MersenneTwister(123)
 # dimensions
 m  = 1000 # number of individuals
-ns = rand(20:20, m) # numbers of observations per individual
+ns = rand(rng, 20:20, m) # numbers of observations per individual
 p  = 5    # number of fixed effects, including intercept
 q  = 3    # number of random effects, including intercept
 l  = 5    # number of WS variance covariates, including intercept
@@ -35,21 +36,21 @@ for i in 1:m
     # first column intercept, remaining entries iid std normal
     X = Matrix{Float64}(undef, ns[i], p)
     X[:, 1] .= 1
-    @views randn!(X[:, 2:p])
+    @views randn!(rng, X[:, 2:p])
     # first column intercept, remaining entries iid std normal
     Z = Matrix{Float64}(undef, ns[i], q)
     Z[:, 1] .= 1
-    @views randn!(Z[:, 2:q])
+    @views randn!(rng, Z[:, 2:q])
     # first column intercept, remaining entries iid std normal
     W = Matrix{Float64}(undef, ns[i], l)
     W[:, 1] .= 1
-    @views randn!(W[:, 2:l])
+    @views randn!(rng, W[:, 2:l])
     # generate random effects: γω = Lγω * z
-    mul!(γω, Lγω, randn!(z))
+    mul!(γω, Lγω, randn!(rng, z))
     # generate y
     μy = X * βtrue + Z * γω[1:q]
     @views ysd = exp.(0.5 .* (W * τtrue .+ dot(γω[1:q], lγω) .+ γω[end]))
-    y = ysd .* randn(ns[i]) .+ μy
+    y = ysd .* randn(rng, ns[i]) .+ μy
     # form a VarLmmObs instance
     obsvec[i] = WSVarLmmObs(y, X, Z, W)
 end

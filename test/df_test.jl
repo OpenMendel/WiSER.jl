@@ -3,17 +3,18 @@ module DFTest
 using DataFrames, Tables, LinearAlgebra, Random, Test, WiSER
 
 Random.seed!(123)
+rng = MersenneTwister(123)
 t = columntable((
     id     = [1; 1; 2; 3; 3; 3; 4], 
-    y      = [missing; randn(6)],
+    y      = [missing; randn(rng, 6)],
     x1     = ones(7), 
-    x2     = randn(7), 
-    x3     = randn(7), 
+    x2     = randn(rng, 7), 
+    x3     = randn(rng, 7), 
     z1     = ones(7),
-    z2     = randn(7), 
+    z2     = randn(rng, 7), 
     w1     = ones(7), 
-    w2     = randn(7), 
-    w3     = randn(7),
+    w2     = randn(rng, 7), 
+    w3     = randn(rng, 7),
     obswts = [2.0; 2.0; 1.0; 0.5; 0.5; 0.5; 1.0]))
 df = DataFrame(t)
 
@@ -30,42 +31,42 @@ dfb  = DataFrame(vlmb)
 τ  = zeros(3)
 Σγ = Matrix{Float64}(I, 2, 2)
 
-y  = [randn(2) for i in 1:3]
-Xs = [randn(2, 3) for i in 1:3]
-Ws = [randn(2, 3) for i in 1:3]
-Zs = [randn(2, 2) for i in 1:3]
+y  = [randn(rng, 2) for i in 1:3]
+Xs = [randn(rng, 2, 3) for i in 1:3]
+Ws = [randn(rng, 2, 3) for i in 1:3]
+Zs = [randn(rng, 2, 2) for i in 1:3]
 
 @testset "WSVarLmmModel Constructor" begin
     @test dfa == dfb == DataFrames.dropmissing(df)
 end
 
 @testset "Simulating Response" begin
-    @test rvarlmm!(f1, f2, f3, :id, df, β, τ;
-        Σγ = Σγ, respname = :response)[1, :response] ≈ -0.356588825151
-    @test rvarlmm(Xs, Zs, Ws, β, τ; Σγ = Σγ)[1][1] ≈ -0.45463680756290314
+    @test rvarlmm!(rng, f1, f2, f3, :id, df, β, τ;
+        Σγ = Σγ, respname = :response)[1, :response] ≈ -3.7193661312903674
+    @test rvarlmm(rng, Xs, Zs, Ws, β, τ; Σγ = Σγ)[1][1] ≈ 2.3445518865974098
     @test "response" in names(df)
 
     vlma.β .= 0
     vlma.τ .= 0
     vlma.Lγ .= [1. 0; 0 1.]
     ytest = vlma.data[1].y[1]
-    WiSER.rand!(vlma) 
+    WiSER.rand!(rng, vlma) 
     @test vlma.data[1].y[1] != ytest
     ytest = vlma.data[1].y[1]
-    WiSER.rand!(vlma; respdist = MvNormal) 
+    WiSER.rand!(rng, vlma; respdist = MvNormal) 
     @test vlma.data[1].y[1] != ytest
     ytest = vlma.data[1].y[1]
-    WiSER.rand!(vlma; respdist = MvTDist, df = 10) 
+    WiSER.rand!(rng, vlma; respdist = MvTDist, df = 10) 
     @test vlma.data[1].y[1] != ytest
     ytest = vlma.data[1].y[1]
     vlma.β[1] = 30.
-    WiSER.rand!(vlma; respdist = Gamma) 
+    WiSER.rand!(rng, vlma; respdist = Gamma) 
     @test vlma.data[1].y[1] != ytest
     ytest = vlma.data[1].y[1]
-    WiSER.rand!(vlma; respdist = InverseGaussian) 
+    WiSER.rand!(rng, vlma; respdist = InverseGaussian) 
     @test vlma.data[1].y[1] != ytest
     ytest = vlma.data[1].y[1]
-    WiSER.rand!(vlma; respdist = InverseGamma) 
+    WiSER.rand!(rng, vlma; respdist = InverseGamma) 
     @test vlma.data[1].y[1] != ytest
 end
 

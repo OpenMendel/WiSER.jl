@@ -1,3 +1,17 @@
+rand!(m :: WSVarLmmModel; kwargs...) = rand!(GLOBAL_RNG, m; kwargs...)
+rvarlmm(Xs::Array{Matrix}, Zs::Array{Matrix},
+    Ws::Array{Matrix}, β::Vector, τ::Vector; kwargs...) = 
+    rvarlmm(GLOBAL_RNG, Xs, Zs, Ws, β, τ; kwargs...)
+rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm, 
+    wsvarformula::FormulaTerm, idvar::Union{Symbol, String},
+    datatable::DataFrame, β::Vector, τ::Vector; kwargs...) = 
+    rvarlmm!(GLOBAL_RNG, meanformula, reformula, 
+    wsvarformula, idvar,datatable, β, τ;  kwargs...)
+rvarlmm(X, Z, W, β, τ, Lγω, Lγ,
+    lγω, γω, z, respdist; kwargs...) = rvarlmm(GLOBAL_RNG, X, Z, W, β, τ, Lγω, Lγ,
+    lγω, γω, z, respdist; kwargs...)
+eval_respdist(μy, vy, respdist; kwargs...) = 
+    eval_respdist(GLOBAL_RNG, μy, vy, respdist; kwargs...)  
 """
     rand!(m::WSVarLmmModel; respdist = MvNormal, γωdist = MvNormal, Σγω = [], kwargs...)
 
@@ -8,11 +22,11 @@ Replaces the responses `m.data[i].y` with a simulated response based on:
 - The distribution of the random effects.
 - If simulating from MvTDistribution, you must specify the degrees of freedom via `df = x`.
 """
-function rand!(
+function rand!(rng::AbstractRNG,
     m :: WSVarLmmModel; 
     respdist = MvNormal, 
     γωdist   = MvNormal, 
-    Σγω      = [], 
+    Σγω      = [],
     kwargs...)
     q = m.q
     isempty(Σγω) ? Σγω = [m.Lγ * transpose(m.Lγ) zeros(q); 
@@ -24,10 +38,10 @@ function rand!(
     γω = Vector{Float64}(undef, q + 1)
     z  = similar(γω)
     for ob in m.data
-        copyto!(ob.y, rvarlmm(transpose(ob.Xt), 
+        copyto!(ob.y, rvarlmm(rng, transpose(ob.Xt), 
         transpose(ob.Zt), transpose(ob.Wt),
         m.β, m.τ, Lγω, Lγ, lγω, γω, z, 
-        respdist, kwargs...))
+        respdist; kwargs...))
     end
 end
 
@@ -75,9 +89,10 @@ This can be checked via `datatable == sort(datatable, idvar)`. The response is b
 It also returns the column `y` as a vector. 
 The datatable **must** be ordered by the ID variable for generated responses to match.
 """
-function rvarlmm(Xs::Array{Matrix{T}}, Zs::Array{Matrix{T}},
+function rvarlmm(rng::AbstractRNG, Xs::Array{Matrix{T}}, Zs::Array{Matrix{T}},
     Ws::Array{Matrix{T}}, β::Vector{T},
-    τ::Vector{T}; respdist = MvNormal, Σγ=[], Σγω=[], kwargs...,
+    τ::Vector{T}; respdist = MvNormal, Σγ=[], Σγω=[],
+    kwargs...,
     ) where T <: BlasReal
 
     @assert length(Xs) == length(Zs) == length(Ws) "Number of provided X, Z, and W matrices do not match"
@@ -95,13 +110,13 @@ function rvarlmm(Xs::Array{Matrix{T}}, Zs::Array{Matrix{T}},
 
     γω = Vector{Float64}(undef, q + 1)
     z  = similar(γω)
-    y = map(i -> rvarlmm(Xs[i], Zs[i], Ws[i], β, τ, Lγω, Lγ,
+    y = map(i -> rvarlmm(rng, Xs[i], Zs[i], Ws[i], β, τ, Lγω, Lγ,
         lγω, γω, z, respdist),
         1:length(Xs))
     return y
 end
 
-function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm, 
+function rvarlmm!(rng::AbstractRNG, meanformula::FormulaTerm, reformula::FormulaTerm, 
     wsvarformula::FormulaTerm, idvar::Union{Symbol, String},
     datatable::DataFrame, β::Vector{T}, τ::Vector{T}; respdist = MvNormal, Σγ=[], Σγω=[],
     respname::Symbol = :y, kwargs...
@@ -114,12 +129,12 @@ function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm,
         idvar = Symbol(idvar)
     end
 
-    function rvarlmmob(f1, f2, f3, subdata,
+    function rvarlmmob(rng, f1, f2, f3, subdata,
         β, τ, Lγω, Lγ, lγω, γω, z, respdist)
-        X = modelmatrix(meanformula, subdata)
-        Z = modelmatrix(reformula, subdata)
-        W = modelmatrix(wsvarformula, subdata)
-        return rvarlmm(X, Z, W, β, τ, Lγω, Lγ, lγω, γω, z, respdist)
+        X = modelmatrix(f1, subdata)
+        Z = modelmatrix(f2, subdata)
+        W = modelmatrix(f3, subdata)
+        return rvarlmm(rng, X, Z, W, β, τ, Lγω, Lγ, lγω, γω, z, respdist)
     end
 
     #apply df-wide schema
@@ -148,7 +163,7 @@ function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm,
     #     y = JuliaDB.groupby(x -> rvarlmmob(meanformula, reformula, wsvarformula,
     #         x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...), table(datatable), idvar) |> 
     #         x -> column(x, 2) |> x -> vcat(x...)
-    y = combine(x -> rvarlmmob(meanformula, reformula, wsvarformula,
+    y = combine(x -> rvarlmmob(rng, meanformula, reformula, wsvarformula,
         x, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...),
         groupby(datatable, idvar)) |>
         x -> x[!, 2]
@@ -157,41 +172,42 @@ function rvarlmm!(meanformula::FormulaTerm, reformula::FormulaTerm,
     return datatable
 end
 
-function rvarlmm(X, Z, W, β, τ, Lγω, Lγ, lγω, γω, z, respdist, kwargs...)
+function rvarlmm(rng::AbstractRNG, X, Z, W, β, τ, Lγω, Lγ,
+    lγω, γω, z, respdist; kwargs...)
     q = size(Lγ, 1)
-    mul!(γω, Lγω, Distributions.rand!(Normal(), z))
+    mul!(γω, Lγω, Distributions.rand!(rng, Normal(), z))
     # generate y
     μy = X * β + Z * γω[1:q]
     @views vy = exp.(W * τ .+ dot(γω[1:q], lγω) .+ γω[end])
-    y = eval_respdist(μy, vy, respdist; kwargs...)
+    y = eval_respdist(rng, μy, vy, respdist; kwargs...)
     return y
 end
 
-function eval_respdist(μy, vy, respdist; df = [])
+function eval_respdist(rng::AbstractRNG, μy, vy, respdist; df = [])
     if respdist == MvNormal || respdist == Normal
-        return rand(MvNormal(μy, Diagonal(vy)))
+        return rand(rng, MvNormal(μy, Diagonal(vy)))
     elseif respdist == MvTDist 
         isempty(df) ? error("degree of freedom for MvTDist not specified, use 'df' = x.") : 
-        return rand(MvTDist(df, μy, Matrix(Diagonal(vy))))
+        return rand(rng, MvTDist(df, μy, Matrix(Diagonal(vy))))
     elseif respdist == Gamma
         θparam = vy ./ μy
         αparam = abs2.(μy) ./ vy
         all(θparam .> 0) && all(αparam .> 0) || 
             error("The current parameter/data does not allow for Gamma to be used. α, θ params must be > 0.")
-        return map((α, θ) -> rand(Gamma(α, θ)), αparam, θparam)
+        return map((α, θ) -> rand(rng, Gamma(α, θ)), αparam, θparam)
     elseif respdist == InverseGaussian
         λparam = μy.^3 ./ vy
-        return map((μ , λ) -> rand(InverseGaussian(μ , λ)), μy, λparam)
+        return map((μ , λ) -> rand(rng, InverseGaussian(μ , λ)), μy, λparam)
     elseif respdist == InverseGamma
         αparam = (abs2.(μy) .- 2) ./ vy
         θparam = μy .* (αparam .- 1)
         all(θparam .> 0) && all(αparam .> 0) || 
             error("The current parameter/data does not allow for InverseGamma to be used. α, θ params must be > 0.")
-        return map((α, θ) -> rand(InverseGamma(α, θ)), αparam, θparam)    
+        return map((α, θ) -> rand(rng, InverseGamma(α, θ)), αparam, θparam)    
     elseif respdist == Uniform
         bparams = μy .+ 0.5sqrt.(12vy)
         aparams = 2μy .- bparams
-        return map((a, b) -> rand(InverseGamma(a, b)), aparams, bparams) 
+        return map((a, b) -> rand(rng, InverseGamma(a, b)), aparams, bparams) 
     else
         error("Response distribution $respdist is not valid. Run respdists() to see available options.")
     end

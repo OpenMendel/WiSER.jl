@@ -1,9 +1,13 @@
 module WiSER
 
+using Base: kwarg_decl
 using DataFrames, Tables, LinearAlgebra, MathProgBase
 using Printf, Reexport, Statistics, CategoricalArrays
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
+using Random
+import Random: GLOBAL_RNG
+
 @reexport using Ipopt
 @reexport using NLopt
 @reexport using StatsModels
