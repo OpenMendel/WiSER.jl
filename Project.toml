@@ -2,7 +2,7 @@ name = "WiSER"
 uuid = "2ff19380-1883-49fc-9d10-450face6b90c"
 keywords = ["WiSER", "mixed model", "longitudinal data", "within-subject variance"]
 authors = ["Hua Zhou <huazhou@ucla.edu>", "Chris German <germc3@ucla.edu>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
