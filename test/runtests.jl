@@ -1,8 +1,10 @@
 module PkgTest
 
-include("df_test.jl")
-include("normal_normal_lognormal_test.jl")
-include("mvt_gamma_invgamma_test.jl")
+include("normal_normal_lognormal_mle_test.jl")
+
+# include("df_test.jl")
+# include("normal_normal_lognormal_test.jl")
+# include("mvt_gamma_invgamma_test.jl")
 
 # include("mvcalc_test.jl")
 # include("perf_test.jl")

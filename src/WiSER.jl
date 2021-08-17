@@ -1,8 +1,8 @@
 module WiSER
 
 using Base: kwarg_decl
-using DataFrames, Tables, LinearAlgebra, MathProgBase
-using Printf, Reexport, Statistics, CategoricalArrays
+using CategoricalArrays, DataFrames, FastGaussQuadrature, LinearAlgebra
+using MathProgBase, Printf, Reexport, Statistics, Tables
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 using Random
@@ -11,9 +11,9 @@ import Random: GLOBAL_RNG
 @reexport using Ipopt
 @reexport using NLopt
 @reexport using StatsModels
-@reexport using Distributions 
+@reexport using Distributions
 
-export 
+export
     # types 
     WSVarLmmObs, 
     WSVarLmmModel,
@@ -436,5 +436,6 @@ include("df.jl")
 include("rand.jl")
 include("multivariate_calculus.jl")
 include("sandwich.jl")
+include("mle.jl")
 
 end
