@@ -406,7 +406,7 @@ function update_wtmat!(m::WSVarLmmModel{T}) where T <: BlasReal
     # accumulate quantities for updating β
     fill!(m.Hββ, 0)
     fill!(m.∇β , 0)
-    for obs in m.data
+    for (idx, obs) in enumerate(m.data)
         # Form Dinv - UU^T (Woodbury structure of Vi inverse)
         n = length(obs.y)
         # Step 1: assemble Iq + Lt Zt diag(e^{-η}) Z L
@@ -442,12 +442,13 @@ function update_wtmat!(m::WSVarLmmModel{T}) where T <: BlasReal
         BLAS.syrk!('U', 'N',  T(1), obs.storage_pn, T(0), obs.Hββ)
         BLAS.syrk!('U', 'T', T(-1), obs.storage_qp, T(1), obs.Hββ)
         copytri!(obs.Hββ, 'U')
-        BLAS.axpy!(T(1), obs.Hββ, m.Hββ)
+        wtobs = isempty(m.obswts) ? one(T) : T(m.obswts[idx])
+        BLAS.axpy!(wtobs, obs.Hββ, m.Hββ)
         # Step 4: accumulate X' Vinv y = X' Dinv y - X' U U' y
         mul!(obs.∇β, obs.storage_pn, obs.storage_n1)
         mul!(obs.storage_q1, obs.storage_qn, obs.storage_n1)
         BLAS.gemv!('T', T(-1), obs.storage_qp, obs.storage_q1, T(1), obs.∇β)      
-        BLAS.axpy!(T(1), obs.∇β, m.∇β)
+        BLAS.axpy!(wtobs, obs.∇β, m.∇β)
     end
     # update β by WLS
     copytri!(m.Hββ, 'U')
