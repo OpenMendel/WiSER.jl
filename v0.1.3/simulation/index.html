@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Simulating responses · WiSER.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">WiSER.jl</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">WiSER.jl Introduction</a></li><li><a class="tocitem" href="../model_fitting/">Model Fitting</a></li><li class="is-active"><a class="tocitem" href>Simulating responses</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Simulating responses</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Simulating responses</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/OpenMendel/WiSER.jl/blob/master/docs/src/simulation.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Simulating-responses"><a class="docs-heading-anchor" href="#Simulating-responses">Simulating responses</a><a id="Simulating-responses-1"></a><a class="docs-heading-anchor-permalink" href="#Simulating-responses" title="Permalink"></a></h1><p>The <code>rvarlmm()</code> and <code>rvarlmm!()</code> functions can be used to generate a respone from user-supplied data and parameters. The <code>rand!()</code> command can be used to overwrite the response in a VarLmmModel object based on the parameters and optional user-supplied distribution.   </p><p>The <code>rand!(m::WSVarLmmModel; respdist = MvNormal, γωdist = MvNormal, Σγω = [], kwargs...)</code> function replaces the responses <code>m.data[i].y</code> with a simulated response based on:</p><ul><li>The data in the model object&#39;s data <code>X, Z, W</code> matrices. </li><li>The parameter values in the model.</li><li>The conditional distribution of the response given the random effects.</li><li>The distribution of the random effects.</li><li>If simulating from MvTDistribution, you must specify the degrees of freedom via <code>df = x</code>.</li></ul><p>The <code>rvarlmm()</code> takes arrays of matricies of the data in addition to the reponse. It generates a simulated response from the VarLMM model based on:</p><ul><li><code>Xs</code>: array of each clusters <code>X</code>: mean fixed effects covariates</li><li><code>Zs</code>: array of each clusters <code>Z</code>: random location effects covariates</li><li><code>Ws</code>: array of each clusters <code>W</code>: within-subject variance fixed effects covariates</li><li><code>β</code>: mean fixed effects vector</li><li><code>τ</code>: within-subject variance fixed effects vector</li><li><code>respdist</code>: the distribution for response. Default is MvNormal. </li><li><code>Σγ</code>: random location effects covariance matrix. </li><li><code>Σγω</code>: joint random location and random scale effects covariance matrix (if generating from full model).</li><li>If simulating from MvTDistribution, you must specify the degrees of freedom via <code>df = x</code>.</li></ul><p>The <code>rvarlmm!()</code> function can be used to generate a simulated response from the VarLMM model based on a dataframe and place the generated response into the datatable with the <code>respname</code> field. </p><p>Note: <strong>the dataframe MUST be ordered by grouping variable for it to generate in the correct order.</strong> This can be checked via <code>dataframe == sort(dataframe, idvar)</code>. The response is based on:</p><ul><li><code>meanformula</code>: represents the formula for the mean fixed effects <code>β</code> (variables in X matrix)</li><li><code>reformula</code>: represents the formula for the mean random effects γ (variables in Z matrix)</li><li><code>wsvarformula</code>: represents the formula for the within-subject variance fixed effects τ (variables in W matrix)</li><li><code>idvar</code>: the id variable for groupings.</li><li><code>dataframe</code>: the dataframe holding all of the data for the model. For this function it <strong>must be in order</strong>.</li><li><code>β</code>: mean fixed effects vector</li><li><code>τ</code>: within-subject variance fixed effects vector</li><li><code>respdist</code>: the distribution for response. Default is MvNormal. </li><li><code>Σγ</code>: random location effects covariance matrix. </li><li><code>Σγω</code>: joint random location and random scale effects covariance matrix (if generating from full model)</li><li><code>respname</code>: symbol representing the simulated response variable name.</li><li>If simulating from MvTDistribution, you must specify the degrees of freedom via <code>df = x</code>.</li></ul><p>For both functions, only one of the Σγ or Σγω matrices have to be specified in order to use the function. Σγ can be used to specify that the generative model will not include a random scale component. It outputs <code>ys</code>: an array of reponse <code>y</code> that match the order of the data arrays (<code>Xs, Zs, Ws</code>).</p><p>We can start by loading the pacakges, data, and fitting a model.</p><pre><code class="language-julia">using CSV, DataFrames, Random, WiSER
+filepath = normpath(joinpath(dirname(pathof(WiSER)), &quot;../data/&quot;))
+df = DataFrame(CSV.File(filepath * &quot;sbp.csv&quot;))
+vlmm = WSVarLmmModel(
+    @formula(sbp ~ 1 + agegroup + gender + bmi_std + meds), 
+    @formula(sbp ~ 1 + bmi_std), 
+    @formula(sbp ~ 1 + agegroup + meds + bmi_std),
+    :id, df);
+WiSER.fit!(vlmm)</code></pre><pre><code class="language-none">******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit https://github.com/coin-or/Ipopt
+******************************************************************************
+
+run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.215811
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.083461
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   106.308       0.14384    739.07    &lt;1e-99
+β2: agegroup       14.9844      0.0633245  236.63    &lt;1e-99
+β3: gender: Male   10.0749      0.100279   100.47    &lt;1e-99
+β4: bmi_std         0.296424    0.0139071   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1107      0.122918   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.5212      0.393792    -6.40    &lt;1e-09
+τ2: agegroup        1.50759     0.135456    11.13    &lt;1e-28
+τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    &lt;1e-11
+τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00196    0.0181387
+ &quot;γ2: bmi_std&quot;      0.0181387  0.000549357</code></pre><p>Once the model has been fit, we can overwrite the response variable simulating a new response based on the model&#39;s current parameters. This is done by calling the <code>rand!()</code> function on the model object. Here we simulate from a multivariate normal dsitribution for <span>$y$</span>.</p><pre><code class="language-julia">yoriginal = copy(vlmm.data[1].y)
+Random.seed!(123)
+WiSER.rand!(vlmm; respdist = MvNormal) 
+[yoriginal vlmm.data[1].y]</code></pre><pre><code class="language-none">9×2 Matrix{Float64}:
+ 159.586  163.223
+ 161.849  161.898
+ 160.484  160.667
+ 161.134  165.167
+ 165.443  162.258
+ 160.053  163.019
+ 162.1    162.065
+ 163.153  161.422
+ 166.675  160.552</code></pre><p>Other response distributions have been coded. To get a list of available distributions use <code>respdists()</code></p><pre><code class="language-julia">respdists()</code></pre><pre><code class="language-none">6-element Vector{Symbol}:
+ :MvNormal
+ :MvTDist
+ :Gamma
+ :InverseGaussian
+ :InverseGamma
+ :Uniform</code></pre><pre><code class="language-julia">WiSER.rand!(vlmm; respdist = InverseGamma) 
+vlmm.data[1].y</code></pre><pre><code class="language-none">9-element Vector{Float64}:
+ 163.1357991396798
+ 165.1430739396795
+ 162.08532565729797
+ 159.6822122192519
+ 161.57688777672846
+ 164.58912923247945
+ 157.98192168704628
+ 164.12521616207954
+ 163.73003300792996</code></pre><p>We can also simulate a response variable from a dataframe and a formula. </p><p>If you don&#39;t want to overwrite the response variable in the dataframe, you can use the <code>respname</code> optional keyword argument to specify the desired variable name to save the response variable as. </p><pre><code class="language-julia">df = DataFrame(id = [1; 1; 2; 3; 3; 3; 4], y = randn(7),
+x2 = randn(7), x3 = randn(7), z2 = randn(7), w2 = randn(7), w3 = randn(7))
+
+f1 = @formula(y ~ 1 + x2 + x3)
+f2 = @formula(y ~ 1 + z2)
+f3 = @formula(y ~ 1 + w2 + w3)
+
+β = zeros(3)
+τ = zeros(3)
+Σγ = [1. 0.; 0. 1.]
+rvarlmm!(f1, f2, f3, :id, df, β, τ;
+        Σγ = Σγ, respname = :response)
+[df[!, :y] df[!, :response]]</code></pre><pre><code class="language-none">7×2 Matrix{Float64}:
+ -0.474718   0.0945213
+ -0.615475   2.06463
+ -0.577114   3.7559
+ -1.14809    1.66547
+ -0.53171   -0.250939
+  1.26381   -0.400644
+ -1.32798   -1.67888</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../model_fitting/">« Model Fitting</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 5 September 2021 04:29">Sunday 5 September 2021</span>. Using Julia version 1.6.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
