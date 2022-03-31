@@ -61,10 +61,7 @@ vlmm = WSVarLmmModel(obsvec);
 println(); println(); println()
 for solver in [
     # KNITRO.KnitroSolver(outlev=3), # outlev 0-6
-    Ipopt.IpoptSolver(print_level = 5, 
-        mehrotra_algorithm = "yes", 
-        warm_start_init_point = "yes",
-        max_iter = 100), 
+    Ipopt.Optimizer() 
     # Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100),
     # Ipopt.IpoptSolver(print_level = 0)
     # Ipopt.IpoptSolver(print_level = 3, hessian_approximation = "limited-memory"),

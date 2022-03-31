@@ -111,6 +111,51 @@ function init_ls!(
 end
 
 
+# """
+#     init_mom!(m::WSVarLmmModel, solver; init = init_ls!(m), parallel = false)
+
+# Initialize `τ` and `Lγ` of a `VarLmmModel` object by method of moment (MoM) 
+# using residulas in `m.obs[i].res`. It involves solving an unweighted NLS problem.
+
+# # Position arguments
+# - `m`: A `WSVarLmmModel` object.
+# - `solver`: NLP solver. Default is `IpoptSolver(print_level=0, mehrotra_algorithm="yes", 
+#     warm_start_init_point="yes", max_iter=100)`.
+
+# # Keyword arguments
+# - `init`: Initlizer for the NLS problem. Default is `init_ls!(m)`. If `init=m`, 
+# then it uses the values provided in `m.τ` and `m.Lγ` as starting point.  
+# - `parallel::Bool`: Multi-threading. Default is `false`.
+# """
+# function init_mom!(
+#     m        :: WSVarLmmModel{T},
+#     solver = Ipopt.IpoptSolver(print_level = 0, mehrotra_algorithm = "yes", 
+#         warm_start_init_point = "yes",
+#         warm_start_bound_push = 1e-6, max_iter = 100);
+#     init     :: WSVarLmmModel = init_ls!(m),
+#     parallel :: Bool = false
+#     ) where T <: BlasReal
+#     # set up NLP optimization problem
+#     npar = m.l + ◺(m.q)
+#     optm = MathProgBase.NonlinearModel(solver)
+#     lb = fill(-Inf, npar)
+#     ub = fill( Inf, npar)
+#     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
+#     # optimize unweighted obj function (MoM estimator)
+#     m.iswtnls[1] = false
+#     m.ismthrd[1] = parallel
+#     par0 = zeros(npar)
+#     modelpar_to_optimpar!(par0, m)
+#     MathProgBase.setwarmstart!(optm, par0)
+#     MathProgBase.optimize!(optm)
+#     optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
+#     optstat = MathProgBase.status(optm) 
+#     optstat == :Optimal || 
+#     @warn("Optimization unsuccesful; got $optstat")
+#     mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
+#     m
+# end
+
 """
     init_mom!(m::WSVarLmmModel, solver; init = init_ls!(m), parallel = false)
 
@@ -129,29 +174,54 @@ then it uses the values provided in `m.τ` and `m.Lγ` as starting point.
 """
 function init_mom!(
     m        :: WSVarLmmModel{T},
-    solver = Ipopt.IpoptSolver(print_level = 0, mehrotra_algorithm = "yes", 
-        warm_start_init_point = "yes",
-        warm_start_bound_push = 1e-6, max_iter = 100);
+    solver   :: MOI.AbstractOptimizer = Ipopt.Optimizer();
+    solver_config::Dict = 
+        Dict("print_level"           => 0, 
+             "mehrotra_algorithm"    => "yes",
+             "warm_start_init_point" => "yes",
+             "max_iter"              => 100),
     init     :: WSVarLmmModel = init_ls!(m),
     parallel :: Bool = false
     ) where T <: BlasReal
+    # Pass options to solver
+    config_solver(solver, solver_config)
     # set up NLP optimization problem
     npar = m.l + ◺(m.q)
-    optm = MathProgBase.NonlinearModel(solver)
-    lb = fill(-Inf, npar)
-    ub = fill( Inf, npar)
-    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
+    MOI.empty!(solver)
+    lb = T[]
+    ub = T[]
+
+    NLPBlock = MOI.NLPBlockData(
+        MOI.NLPBoundsPair.(lb, ub), m, true
+    )
+    
+    par0 = Vector{T}(undef, npar)
+    modelpar_to_optimpar!(par0, m)
+
+    solver_pars = MOI.add_variables(solver, npar)
+    for i in 1:npar
+        MOI.set(solver, MOI.VariablePrimalStart(), solver_pars[i], par0[i])
+    end
+
+    MOI.set(solver, MOI.NLPBlock(), NLPBlock)
+    MOI.set(solver, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+
     # optimize unweighted obj function (MoM estimator)
     m.iswtnls[1] = false
     m.ismthrd[1] = parallel
-    par0 = zeros(npar)
-    modelpar_to_optimpar!(par0, m)
-    MathProgBase.setwarmstart!(optm, par0)
-    MathProgBase.optimize!(optm)
-    optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
-    optstat = MathProgBase.status(optm) 
-    optstat == :Optimal || 
-    @warn("Optimization unsuccesful; got $optstat")
+    
+    MOI.optimize!(solver)
+    
+    # output
+    optstat = MOI.get(solver, MOI.TerminationStatus())
+    optstat in (MOI.LOCALLY_SOLVED, MOI.ALMOST_LOCALLY_SOLVED) || 
+        @warn("Optimization unsuccessful; got $optstat")
+    xsol = similar(par0)
+    for i in eachindex(xsol)
+        xsol[i] = MOI.get(solver, MOI.VariablePrimal(), MOI.VariableIndex(i))
+    end
+    optimpar_to_modelpar!(m, xsol)
+
     mul!(m.Σγ, m.Lγ, transpose(m.Lγ))
     m
 end
