@@ -1,12 +1,14 @@
 module WiSER
 
 using Base: kwarg_decl
-using DataFrames, Tables, LinearAlgebra, MathProgBase
+using DataFrames, Tables, LinearAlgebra, MathOptInterface
 using Printf, Reexport, Statistics, CategoricalArrays
 import LinearAlgebra: BlasReal, copytri!
 import DataFrames: DataFrame
 using Random
 import Random: GLOBAL_RNG
+
+const MOI = MathOptInterface
 
 @reexport using Ipopt
 @reexport using NLopt
@@ -106,7 +108,7 @@ struct WSVarLmmObs{T <: BlasReal}
     diagDVRV              :: Vector{T}
     # for gradient wrt Lγ
     Zt_Dinv               :: Matrix{T}
-    Zt_UUt_rrt_Dinv_Z :: Matrix{T}
+    Zt_UUt_rrt_Dinv_Z     :: Matrix{T}
     Zt_UUt_rrt_UUt_Z      :: Matrix{T}
     Zt_UUt                :: Matrix{T}
     Lt_Zt_Dinv_r          :: Vector{T}
@@ -232,7 +234,7 @@ Within-subject variance linear mixed model, which contains a vector of
 - `wsvarnames`: Names of the ws variance fixed effects covariates
 
 """
-struct WSVarLmmModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
+struct WSVarLmmModel{T <: BlasReal} <: MOI.AbstractNLPEvaluator
     # data
     data            :: Vector{WSVarLmmObs{T}}
     respname        :: String
@@ -349,7 +351,7 @@ function WSVarLmmModel(
     HLγLγ    = Matrix{T}(undef, q◺, q◺)
     HΣγΣγ    = Matrix{T}(undef, abs2(q), abs2(q))
     # weighted NLS fitting or not
-    iswtnls = [false]
+    iswtnls  = [false]
     # multi-threading or not
     ismthrd  = [false]
     # has been fit or not 
@@ -427,6 +429,12 @@ function Base.show(io::IO, m::WSVarLmmModel)
     Base.print_matrix(IOContext(io, :compact => true), [m.renames m.Σγ])
     println(io)
     println(io)
+end
+
+function config_solver(solver::MOI.AbstractOptimizer, solver_config::Dict)
+    for (key, val) in solver_config
+        MOI.set(solver, MOI.RawOptimizerAttribute(key), val)
+    end
 end
 
 include("nls.jl")

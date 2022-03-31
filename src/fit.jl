@@ -3,7 +3,7 @@
     solver=IpoptSolver(print_level=0, mehrotra_algorithm="yes", max_iter=100);
     init=init_ls!(m), runs = 2)
 
-Fit a `WSVarLMMModel` object using a weighted NLS method.
+Fit a `WSVarLmmModel` object using a weighted NLS method.
 
 # Positional arguments
 - `m::WSVarLmmModel`: Model to fit.
@@ -29,38 +29,70 @@ Fit a `WSVarLMMModel` object using a weighted NLS method.
 - `verbose::Bool`: Verbose display or not, Default is `true`.
 """
 function fit!(
-    m        :: WSVarLmmModel,
-    solver = Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = "yes",
-    warm_start_init_point="yes", max_iter=100);
-    init     :: WSVarLmmModel = init_ls!(m),
+    m        :: WSVarLmmModel{T},
+    solver   :: MOI.AbstractOptimizer = Ipopt.Optimizer();
+    solver_config::Dict = 
+        Dict("print_level"           => 0, 
+             "mehrotra_algorithm"    => "yes",
+             "warm_start_init_point" => "yes",
+             "max_iter"              => 100),
+    init     :: WSVarLmmModel{T} = init_ls!(m),
     runs     :: Integer = 2,
     parallel :: Bool = false,
-    verbose  :: Bool = true)
+    verbose  :: Bool = true
+    ) where {T<:BlasReal}
+    solvertype = typeof(solver)
+    solvertype <: Ipopt.Optimizer ||
+        @warn("Optimizer object is $solvertype, `solver_config` may need to be defined.")
+    # Pass options to solver
+    config_solver(solver, solver_config)
     # set up NLP optimization problem
     npar = m.l + ◺(m.q)
-    optm = MathProgBase.NonlinearModel(solver)
-    lb   = fill(-Inf, npar)
-    ub   = fill( Inf, npar)
-    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Min, m)
-    par0 = Vector{Float64}(undef, npar)
+    MOI.empty!(solver)
+    lb   = T[]
+    ub   = T[]
+
+    NLPBlock = MOI.NLPBlockData(
+        MOI.NLPBoundsPair.(lb, ub), m, true
+    )
+
+    par0 = Vector{T}(undef, npar)
+    modelpar_to_optimpar!(par0, m)
+    
+    solver_pars = MOI.add_variables(solver, npar)
+    for i in 1:npar
+        MOI.set(solver, MOI.VariablePrimalStart(), solver_pars[i], par0[i])
+    end
+    
+    MOI.set(solver, MOI.NLPBlock(), NLPBlock)
+    MOI.set(solver, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+    
     # optimize weighted NLS
     m.iswtnls[1] = true
     m.ismthrd[1] = parallel
+    xsol = similar(par0)
     βprev, τprev, Lγprev = similar(m.β), similar(m.τ), similar(m.Lγ)
     for run in 1:runs
         copyto!(βprev, m.β); copyto!(τprev, m.τ), copyto!(Lγprev, m.Lγ)
         tic = time() # start timing
         # update Vi, then β and residuals with WLS
         update_wtmat!(m)
-        # update τ and Lγ by WNLS        
+        # update τ and Lγ by WNLS
         modelpar_to_optimpar!(par0, m)
-        MathProgBase.setwarmstart!(optm, par0)
-        MathProgBase.optimize!(optm)
-        optimpar_to_modelpar!(m, MathProgBase.getsolution(optm))
+        for i in 1:npar
+            MOI.set(solver, MOI.VariablePrimalStart(), solver_pars[i], par0[i])
+        end
+        MOI.optimize!(solver)
         toc = time()
-        optstat = MathProgBase.status(optm)
-        optstat == :Optimal || 
-        @warn("Optimization unsuccesful; got $optstat; run = $run")
+        optstat = MOI.get(solver, MOI.TerminationStatus())
+        optstat in (MOI.LOCALLY_SOLVED, MOI.ALMOST_LOCALLY_SOLVED) || 
+            @warn("Optimization unsuccessful; got $optstat")
+        # Get solver solution values
+        fill!(xsol, zero(T))
+        for i in eachindex(xsol)
+            xsol[i] = MOI.get(solver, MOI.VariablePrimal(), MOI.VariableIndex(i))
+        end
+        optimpar_to_modelpar!(m, xsol)
         verbose && @printf(
             "run = %d, ‖Δβ‖ = %f, ‖Δτ‖ = %f, ‖ΔL‖ = %f, status = %s, time(s) = %f\n", 
             run, 
@@ -85,9 +117,9 @@ end
 Translate model parameters in `m` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
-    par :: Vector,
+    par :: AbstractVector{T},
     m   :: WSVarLmmModel{T}
-    ) where T <: BlasReal
+    ) where {T<:BlasReal}
     q, l = m.q, m.l
     # τ
     copyto!(par, m.τ)
@@ -106,9 +138,9 @@ end
 Translate optimization variables in `par` to the model parameters in `m`.
 """
 function optimpar_to_modelpar!(
-    m   :: WSVarLmmModel, 
-    par :: Vector
-    )
+    m   :: WSVarLmmModel{T}, 
+    par :: Vector{T}
+    ) where {T<:BlasReal}
     q, l = m.q, m.l
     # τ
     copyto!(m.τ, 1, par, 1, l)
@@ -122,32 +154,32 @@ function optimpar_to_modelpar!(
     m
 end
 
-function MathProgBase.initialize(
-    m                  :: WSVarLmmModel, 
+function MOI.initialize(
+    m                  :: WSVarLmmModel,
     requested_features :: Vector{Symbol}
     )
     for feat in requested_features
-        if !(feat in [:Grad, :Hess])
+        if !(feat in MOI.features_available(m))
             error("Unsupported feature $feat")
         end
     end
 end
 
-MathProgBase.features_available(m::WSVarLmmModel) = [:Grad, :Hess]
+MOI.features_available(m::WSVarLmmModel) = [:Grad, :Hess]
 
-function MathProgBase.eval_f(
-    m   :: WSVarLmmModel, 
-    par :: Vector
-    )
+function MOI.eval_objective(
+    m   :: WSVarLmmModel{T}, 
+    par :: AbstractVector{T}
+    ) where {T<:BlasReal}
     optimpar_to_modelpar!(m, par)
     nlsv_obj!(m, false, false, false)
 end
 
-function MathProgBase.eval_grad_f(
-    m    :: WSVarLmmModel, 
-    grad :: Vector, 
-    par  :: Vector
-    )
+function MOI.eval_objective_gradient(
+    m    :: WSVarLmmModel{T}, 
+    grad :: Vector{T}, 
+    par  :: AbstractVector{T}
+    ) where {T<:BlasReal}
     q, l = m.q, m.l
     optimpar_to_modelpar!(m, par) 
     obj = nlsv_obj!(m, true, false, false)
@@ -162,11 +194,15 @@ function MathProgBase.eval_grad_f(
     end
 end
 
-MathProgBase.eval_g(m::WSVarLmmModel, g, par) = nothing
-MathProgBase.jac_structure(m::WSVarLmmModel) = Int[], Int[]
-MathProgBase.eval_jac_g(m::WSVarLmmModel, J, par) = nothing
+function MOI.eval_constraint(
+    m   :: WSVarLmmModel,
+    g   :: Vector{T},
+    par :: AbstractVector{T}
+    ) where {T<:BlasReal}
+    return nothing
+end
 
-function MathProgBase.hesslag_structure(m::WSVarLmmModel)
+function MOI.hessian_lagrangian_structure(m::WSVarLmmModel)
     # our Hessian is a dense matrix, work on the upper triangular part
     npar = m.l + ◺(m.q)
     arr1 = Vector{Int}(undef, ◺(npar))
@@ -177,11 +213,16 @@ function MathProgBase.hesslag_structure(m::WSVarLmmModel)
         arr2[idx] = j
         idx      += 1
     end
-    return (arr1, arr2)
+    return zip(arr1, arr2)
 end
 
-function MathProgBase.eval_hesslag(m::WSVarLmmModel, H::Vector{T},
-    par::Vector{T}, σ::T, μ::Vector{T}) where {T}
+function MOI.eval_hessian_lagrangian(
+    m   :: WSVarLmmModel, 
+    H   :: AbstractVector{T},
+    par :: AbstractVector{T}, 
+    σ   :: T, 
+    μ   :: AbstractVector{T}
+    ) where {T<:BlasReal}
     q, l = m.q, m.l
     # refresh obj, gradient, and hessian
     optimpar_to_modelpar!(m, par)
