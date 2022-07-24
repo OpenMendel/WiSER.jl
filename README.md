@@ -17,9 +17,12 @@ pkg"add WiSER"
 
 The methods and applications of this software package are detailed in the following publication:
 
-German CA, Sinsheimer JS, Zhou JJ., and Zhou H. (2021) WiSER: Robust and scalable estimation and inference of within-subject variances from intensive longitudinal data. Biometrics, in press. <https://doi.org/10.1111/biom.13506>
+*German CA, Sinsheimer JS, Zhou J, Zhou H. WiSER: Robust and scalable estimation and inference of within-subject variances from intensive longitudinal data. Biometrics. 2021 Jun 18:10.1111/biom.13506. doi: 10.1111/biom.13506. Epub ahead of print. PMID: 34142722; PMCID: PMC8683571.*
 
 If you use [OpenMendel](https://openmendel.github.io) analysis packages in your research, please cite the following reference in the resulting publications:
 
-Zhou H, Sinsheimer JS, Bates DM, Chu BB, German CA, Ji SS, Keys KL, Kim J, Ko S, Mosher GD, Papp JC, Sobel EM, Zhai J, Zhou JJ, Lange K. (2020) OPENMENDEL: a cooperative programming project for statistical genetics. Hum Genetics, 139(1):61-71. <https://doi.org/10.1007/s00439-019-02001-z> PMCID: PMC6763373
+*Zhou H, Sinsheimer JS, Bates DM, Chu BB, German CA, Ji SS, Keys KL, Kim J, Ko S, Mosher GD, Papp JC, Sobel EM, Zhai J, Zhou JJ, Lange K. OPENMENDEL: a cooperative programming project for statistical genetics. Hum Genet. 2020 Jan;139(1):61-71. doi: 10.1007/s00439-019-02001-z. Epub 2019 Mar 26. PMID: 30915546; PMCID: [PMC6763373](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6763373/).*
 
+### Acknowledgments
+
+This project has been supported by the National Institutes of Health under awards R01GM053275, R01HG006139, R25GM103774, and 1R25HG011845.
