@@ -87,7 +87,7 @@ function fit!(
         toc = time()
         optstat = MOI.get(solver, MOI.TerminationStatus())
         optstat in (MOI.LOCALLY_SOLVED, MOI.ALMOST_LOCALLY_SOLVED) || 
-            throw_on_failure ? error("Optimization unsuccessful; got $optstat") : @warn("Optimization unsuccessful; got $optstat")
+            (throw_on_failure ? error("Optimization unsuccessful; got $optstat") : @warn("Optimization unsuccessful; got $optstat"))
         # Get solver solution values
         fill!(xsol, zero(T))
         for i in eachindex(xsol)
