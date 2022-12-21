@@ -9,7 +9,9 @@ If `gniters > 0`, run `gniters` Gauss-Newton iterations to improve τ.
 """
 function init_ls!(
     m       :: WSVarLmmModel{T};
-    gniters :: Integer = 5
+    gniters :: Integer = 5, 
+    noise_level :: T = zero(T),
+    rng = Random.GLOBAL_RNG
     ) where T <: BlasReal
     # dimensions
     q, l = m.q, m.l
@@ -38,6 +40,9 @@ function init_ls!(
         end
         # accmulate vec(Zi'diag(r) diag(r)Zi)
         BLAS.syrk!('U', 'N', T(1), obs.storage_qn, T(1), m.Lγ)
+    end
+    if noise_level != zero(T) # add random noise to guarantee full rank of Z
+        m.Lγ .+= randn!(rng, m.∇Lγ) .* noise_level
     end
     copytri!(m.Lγ, 'U')
     # LS estimate for Σγ
