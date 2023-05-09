@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Model Fitting · WiSER.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">WiSER.jl</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">WiSER.jl Introduction</a></li><li class="is-active"><a class="tocitem" href>Model Fitting</a><ul class="internal"><li><a class="tocitem" href="#Example-data"><span>Example data</span></a></li><li><a class="tocitem" href="#Formulate-model"><span>Formulate model</span></a></li><li><a class="tocitem" href="#Fit-model"><span>Fit model</span></a></li><li><a class="tocitem" href="#Tips-for-improving-estimation"><span>Tips for improving estimation</span></a></li><li><a class="tocitem" href="#Additional-Features"><span>Additional Features</span></a></li></ul></li><li><a class="tocitem" href="../simulation/">Simulating responses</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Model Fitting</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Model Fitting</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/OpenMendel/WiSER.jl/blob/master/docs/src/model_fitting.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Model-Fitting"><a class="docs-heading-anchor" href="#Model-Fitting">Model Fitting</a><a id="Model-Fitting-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Fitting" title="Permalink"></a></h1><p><code>WiSER.jl</code> implements a regression method for modeling the within-subject variability of a longitudinal measurement. It stands for <strong>wi</strong>thin-<strong>s</strong>ubject variance <strong>e</strong>stimation by robust <strong>r</strong>egression. </p><p>Here we cover model construction and parameter estimation using WiSER.</p><pre><code class="language-julia">using CSV, DataFrames, WiSER</code></pre><h2 id="Example-data"><a class="docs-heading-anchor" href="#Example-data">Example data</a><a id="Example-data-1"></a><a class="docs-heading-anchor-permalink" href="#Example-data" title="Permalink"></a></h2><p>The example dataset, <code>sbp.csv</code>, is contained in <code>data</code> folder of the package. It is a simulated datatset with 500 individuals, each having 9 to 11 observations. The outcome, systolic blood pressure (SBP), is a function of other covariates. Below we read in the data as a <code>DataFrame</code> using the <a href="https://juliadata.github.io/CSV.jl">CSV package</a>. WiSER.jl can take other data table objects that comply with the <code>Tables.jl</code> format, such as <code>IndexedTables</code> from the <a href="https://github.com/JuliaData/JuliaDB.jl">JuliaDB</a> package.</p><pre><code class="language-julia">filepath = normpath(joinpath(dirname(pathof(WiSER)), &quot;../data/&quot;))
+df = DataFrame(CSV.File(filepath * &quot;sbp.csv&quot;));</code></pre><pre><code class="language-julia">5011×8 DataFrame
+  Row │ id     sbp      agegroup  gender  bmi      meds    bmi_std     obswt   
+      │ Int64  Float64  Float64   String  Float64  String  Float64     Float64 
+──────┼────────────────────────────────────────────────────────────────────────
+    1 │     1  159.586       3.0  Male    23.1336  NoMeds  -1.57733        4.0
+    2 │     1  161.849       3.0  Male    26.5885  NoMeds   1.29927        4.0
+    3 │     1  160.484       3.0  Male    24.8428  NoMeds  -0.154204       4.0
+    4 │     1  161.134       3.0  Male    24.9289  NoMeds  -0.0825105      4.0
+    5 │     1  165.443       3.0  Male    24.8057  NoMeds  -0.185105       4.0
+    6 │     1  160.053       3.0  Male    24.1583  NoMeds  -0.72415        4.0
+    7 │     1  162.1         3.0  Male    25.2543  NoMeds   0.188379       4.0
+    8 │     1  163.153       3.0  Male    24.3951  NoMeds  -0.527037       4.0
+  ⋮   │   ⋮       ⋮        ⋮        ⋮        ⋮       ⋮         ⋮          ⋮
+ 5005 │   500  155.672       3.0  Female  24.4651  NoMeds  -0.468741       3.0
+ 5006 │   500  148.389       3.0  Female  25.8129  NoMeds   0.653514       3.0
+ 5007 │   500  152.491       3.0  Female  24.5818  NoMeds  -0.371555       3.0
+ 5008 │   500  153.844       3.0  Female  25.721   NoMeds   0.57693        3.0
+ 5009 │   500  150.164       3.0  Female  24.3545  NoMeds  -0.560843       3.0
+ 5010 │   500  150.248       3.0  Female  23.8532  NoMeds  -0.978159       3.0
+ 5011 │   500  152.433       3.0  Female  26.1232  NoMeds   0.911814       3.0</code></pre><h2 id="Formulate-model"><a class="docs-heading-anchor" href="#Formulate-model">Formulate model</a><a id="Formulate-model-1"></a><a class="docs-heading-anchor-permalink" href="#Formulate-model" title="Permalink"></a></h2><p>First we will create a <code>WSVarLmmModel</code> object from the dataframe.</p><p>The <code>WSVarLmmModel()</code> function takes the following arguments: </p><ul><li><code>meanformula</code>: the formula for the mean fixed effects β (variables in X matrix).</li><li><code>reformula</code>: the formula for the mean random effects γ (variables in Z matrix).</li><li><code>wsvarformula</code>: the formula  for the within-subject variance fixed effects τ (variables in W matrix). </li><li><code>idvar</code>: the id variable for groupings. </li><li><code>tbl</code>: the datatable holding all of the data for the model. Can be a <code>DataFrame</code> or various types of tables that comply with <code>Tables.jl</code> formatting, such as an <code>IndexedTable</code>.</li><li><code>wtvar</code>: Optional argument of variable name holding subject-level weights in the <code>tbl</code>.</li></ul><p>For documentation of the <code>WSVarLmmModel</code> function, type <code>?WSVarLmmModel</code> in Julia REPL.</p><article class="docstring"><header><a class="docstring-binding" id="WiSER.WSVarLmmModel" href="#WiSER.WSVarLmmModel"><code>WiSER.WSVarLmmModel</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia">WSVarLmmModel</code></pre><p>Within-subject variance linear mixed model, which contains a vector of  <code>WSVarLmmObs</code> as data, model parameters, and working arrays.</p><pre><code class="language-none">WSVarLmmModel(obsvec; obswts, meannames, renames, wsvarnames)</code></pre><p><strong>Positional arguments</strong></p><ul><li><code>obsvec</code>: Vector of WSVarLmmObs</li></ul><p><strong>Keyword arguments</strong></p><ul><li><code>obswts</code>: Subject-level weight vector of observation weights, length of the <code>obsvec</code> object.</li><li><code>meannames</code>: Names of the mean fixed effects covariates</li><li><code>renames</code>: Names of the random location effects covariates</li><li><code>wsvarnames</code>: Names of the ws variance fixed effects covariates</li></ul></div><a class="docs-sourcelink" target="_blank" href="https://github.com/OpenMendel/WiSER.jl/blob/45f97368e68865cd4aba640ba54fc8a9f49bb1ef/src/WiSER.jl#L219-L236">source</a></section></article><p>We will model sbp as a function of age, gender, and bmi<em>std. `bmi</em>std<code>is the centered and scaled</code>bmi`. The following commands fit the following model:</p><p class="math-container">\[\text{sbp}_{ij} = \beta_0 + \beta_1 \cdot \text{agegroup}_{ij} + \beta_2 \cdot \text{gender}_{i} + \beta_3 \cdot \text{bmi}_{ij} + \gamma_{i0} + \gamma_{i1} \cdot \text{bmi} + \epsilon_{ij}\]</p><p><span>$\epsilon_{ij}$</span> has mean 0 and variance <span>$\sigma^2_{\epsilon_{ij}}$</span></p><p><span>$\gamma_{i} = (\gamma_{i0}, \gamma_{i1})$</span> has mean <strong>0</strong> and variance <span>$\Sigma_\gamma$</span></p><p class="math-container">\[\sigma^2_{\epsilon_{ij}} = \exp(\tau_0 + \tau_1 \cdot \text{agegroup}_{ij} + \tau_2 \cdot \text{gender}_{i} + \tau_3 \cdot \text{bmi}_{ij})\]</p><pre><code class="language-julia">vlmm = WSVarLmmModel(
+    @formula(sbp ~ 1 + agegroup + gender + bmi_std + meds), 
+    @formula(sbp ~ 1 + bmi_std), 
+    @formula(sbp ~ 1 + agegroup + meds + bmi_std),
+    :id, df);</code></pre><p>The <code>vlmm</code> object has the appropriate data formalated above. We can now use the <code>fit!()</code> function to fit the model.</p><h2 id="Fit-model"><a class="docs-heading-anchor" href="#Fit-model">Fit model</a><a id="Fit-model-1"></a><a class="docs-heading-anchor-permalink" href="#Fit-model" title="Permalink"></a></h2><p>Main arguments of the <code>fit!()</code> function are:</p><ul><li><code>m::WSVarLmmModel</code>: The model to fit.</li><li><code>solver</code>: Non-linear programming solver to be used.</li><li><code>runs::Integer</code>: Number of weighted nonlinear least squares runs. Default is 2.</li></ul><p>For a complete documentation, type <code>?WSVarLmmModel</code> in Julia REPL.</p><article class="docstring"><header><a class="docstring-binding" id="WiSER.fit!" href="#WiSER.fit!"><code>WiSER.fit!</code></a> — <span class="docstring-category">Function</span></header><section><div><pre><code class="language-julia">fit!(m::WSVarLmmModel, 
+solver=IpoptSolver(print_level=0, mehrotra_algorithm=&quot;yes&quot;, max_iter=100);
+init=init_ls!(m), runs = 2)</code></pre><p>Fit a <code>WSVarLmmModel</code> object using a weighted NLS method.</p><p><strong>Positional arguments</strong></p><ul><li><code>m::WSVarLmmModel</code>: Model to fit.</li><li><code>solver</code>: Nonlinear programming solver to use. Common choices include:  <ul><li><code>Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm=&quot;yes&quot;, warm_start_init_point=&quot;yes&quot;, max_iter=100)</code>.</li><li><code>Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100)</code>.</li><li><code>Ipopt.IpoptSolver(print_level=0, max_iter=100)</code>.</li><li><code>KNITRO.KnitroSolver(outlev=3)</code>. (Knitro is commercial software)</li><li><code>NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000)</code>.  </li><li><code>NLopt.NLoptSolver(algorithm=:LD_LBFGS, maxeval=4000)</code>.</li></ul></li></ul><p><strong>Keyword arguments</strong></p><ul><li><code>init</code>: Initialization strategy. <code>fit!</code> will use <code>m.τ</code> and <code>m.Lγ</code> to set the    weight matrices <code>Vi</code> and solve the weighted NLS to obtain an   estimate for <code>m.β</code>, <code>m.τ</code>, and <code>m.Lγ</code>.  Choices for <code>init</code> include  <ul><li><code>init_ls!(m)</code> (default): initialize by the least squares analytical solution.  </li><li><code>init_mom!(m)</code>: initialize by the unweighted NLS (MoM).  </li><li><code>m</code>: initilize from user supplied values in <code>m.τ</code> and <code>m.Lγ</code>.</li></ul></li><li><code>runs::Integer</code>: Number of weighted NLS runs; default is 2. Each run will use the    newest <code>m.τ</code> and <code>m.Lγ</code> to update the weight matrices <code>Vi</code> and solve the    new weighted NLS.</li><li><code>parallel::Bool</code>: Multi-threading or not. Default is <code>false</code>. </li><li><code>verbose::Bool</code>: Verbose display or not, Default is <code>true</code>.</li></ul></div><a class="docs-sourcelink" target="_blank" href="https://github.com/OpenMendel/WiSER.jl/blob/45f97368e68865cd4aba640ba54fc8a9f49bb1ef/src/fit.jl#L1-L30">source</a></section></article><pre><code class="language-julia">WiSER.fit!(vlmm)</code></pre><pre><code class="language-none">******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit https://github.com/coin-or/Ipopt
+******************************************************************************
+
+run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.201188
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.080523
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   106.308       0.14384    739.07    &lt;1e-99
+β2: agegroup       14.9844      0.0633245  236.63    &lt;1e-99
+β3: gender: Male   10.0749      0.100279   100.47    &lt;1e-99
+β4: bmi_std         0.296424    0.0139071   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1107      0.122918   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.5212      0.393792    -6.40    &lt;1e-09
+τ2: agegroup        1.50759     0.135456    11.13    &lt;1e-28
+τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    &lt;1e-11
+τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00196    0.0181387
+ &quot;γ2: bmi_std&quot;      0.0181387  0.000549357</code></pre><p>The estimated coefficients and random effects covariance parameters can be retrieved by</p><pre><code class="language-julia">coef(vlmm)</code></pre><pre><code class="language-none">9-element Vector{Float64}:
+ 106.3082866175766
+  14.984423626293006
+  10.074886642511672
+   0.29642385700569635
+ -10.110677648545401
+  -2.5211956122840613
+   1.5075882029989467
+  -0.43522497609297117
+   0.005269501831413771</code></pre><p>or individually</p><pre><code class="language-julia">vlmm.β</code></pre><pre><code class="language-none">5-element Vector{Float64}:
+ 106.3082866175766
+  14.984423626293006
+  10.074886642511672
+   0.29642385700569635
+ -10.110677648545401</code></pre><pre><code class="language-julia">vlmm.τ</code></pre><pre><code class="language-none">4-element Vector{Float64}:
+ -2.5211956122840613
+  1.5075882029989467
+ -0.43522497609297117
+  0.005269501831413771</code></pre><pre><code class="language-julia">vlmm.Σγ</code></pre><pre><code class="language-none">2×2 Matrix{Float64}:
+ 1.00196    0.0181387
+ 0.0181387  0.000549357</code></pre><p>The variance-covariance matrix of the estimated parameters (β, τ, Lγ) can be rerieved by</p><pre><code class="language-julia">vlmm.vcov</code></pre><pre><code class="language-none">12×12 Matrix{Float64}:
+  0.0206899    -0.00753187   -0.00618382   …  -0.000123531   0.0644858
+ -0.00753187    0.00400999    0.000152994      4.07896e-5   -0.0194226
+ -0.00618382    0.000152994   0.0100558        4.35497e-5   -0.0299542
+  5.60981e-5   -4.80751e-5    0.000108448      8.06623e-6    0.00149567
+ -0.00311952   -0.000362412   0.00122535      -7.1571e-5     0.0168424
+ -0.00652959    0.00207365    0.00276734   …   0.00217472   -1.70443
+  0.00229271   -0.000743467  -0.000951293     -0.000740359   0.58213
+ -0.000719608   0.000263081   0.000294779      0.000197117  -0.152908
+  3.10756e-5    1.70391e-5   -0.00011849      -5.50781e-5    0.0266044
+  0.000166021  -3.24178e-6   -0.00011537       9.0954e-6    -0.00139559
+ -0.000123531   4.07896e-5    4.35497e-5   …   7.84536e-5   -0.0244586
+  0.0644858    -0.0194226    -0.0299542       -0.0244586    19.1312</code></pre><p>Confidence intervals for <span>$\boldsymbol{\beta}, \boldsymbol{\tau}$</span> can be obtained by <code>confint</code>. By default it returns 95% confidence intervals (<span>$\alpha$</span> level = 0.05). </p><pre><code class="language-julia">confint(vlmm)</code></pre><pre><code class="language-none">9×2 Matrix{Float64}:
+ 106.026      106.59
+  14.8603      15.1085
+   9.87834     10.2714
+   0.269167     0.323681
+ -10.3516      -9.86976
+  -3.29301     -1.74938
+   1.2421       1.77308
+  -0.556954    -0.313496
+  -0.0386413    0.0491803</code></pre><pre><code class="language-julia"># 90% confidence interval
+confint(vlmm, 0.1)</code></pre><pre><code class="language-none">9×2 Matrix{Float64}:
+ 106.29       106.326
+  14.9765      14.9924
+  10.0623      10.0875
+   0.294676     0.298171
+ -10.1261     -10.0952
+  -2.57068     -2.47171
+   1.49057      1.52461
+  -0.44303     -0.42742
+   0.0024542    0.00808481</code></pre><p><strong>Note</strong>: The default solver for WiSER.jl is :</p><p><code>Ipopt.IpoptSolver(print_level=0, mehrotra_algorithm = &quot;yes&quot;, warm_start_init_point=&quot;yes&quot;, max_iter=100)</code> </p><p>This was chosen as it a free, open-source solver and the options typically reduce line search and lead to much faster fitting than other options. However, it can be a bit more instable. Below are tips to help improve estimation if the fit seems very off or fails. Switching the solver options or removing them and assigning it to the base Ipopt Solver <code>Ipopt.IpoptSolver(max_iter=100)</code> can take longer to converge but is usually a bit more stable. </p><h2 id="Tips-for-improving-estimation"><a class="docs-heading-anchor" href="#Tips-for-improving-estimation">Tips for improving estimation</a><a id="Tips-for-improving-estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Tips-for-improving-estimation" title="Permalink"></a></h2><p><code>fit!</code> may fail due to various reasons. Often it indicates ill-conditioned data or an inadequate model. Following strategies may improve the fit. </p><h3 id="Standardize-continuous-predictors"><a class="docs-heading-anchor" href="#Standardize-continuous-predictors">Standardize continuous predictors</a><a id="Standardize-continuous-predictors-1"></a><a class="docs-heading-anchor-permalink" href="#Standardize-continuous-predictors" title="Permalink"></a></h3><p>In above example, we used the standardardized <code>bmi</code>. If we used the original <code>bmi</code> variable, the estimates of τ are instable, reflected by the large standard errors.</p><pre><code class="language-julia"># using unscaled bmi causes ill-conditioning
+vlmm_bmi = WSVarLmmModel(
+    @formula(sbp ~ 1 + agegroup + gender + bmi + meds), 
+    @formula(sbp ~ 1 + bmi), 
+    @formula(sbp ~ 1 + agegroup + meds + bmi),
+    :id, df);
+WiSER.fit!(vlmm_bmi)</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.079164
+run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.125981
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi + meds
+Random Effects Formula:
+sbp ~ 1 + bmi
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+────────────────────────────────────────────────────────────
+                      Estimate  Std. Error       Z  Pr(&gt;|Z|)
+────────────────────────────────────────────────────────────
+β1: (Intercept)   100.131        0.319906   313.00    &lt;1e-99
+β2: agegroup       14.9844       0.0633245  236.63    &lt;1e-99
+β3: gender: Male   10.0749       0.100279   100.47    &lt;1e-99
+β4: bmi             0.246808     0.0115793   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1107       0.122918   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.63101     17.2804      -0.15    0.8790
+τ2: agegroup        1.50759      5.69286      0.26    0.7911
+τ3: meds: OnMeds   -0.435225     1.37021     -0.32    0.7508
+τ4: bmi             0.00438748   0.0281074    0.16    0.8760
+────────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  0.484542    0.00557087
+ &quot;γ2: bmi&quot;          0.00557087  0.000380843</code></pre><h3 id="Increase-runs"><a class="docs-heading-anchor" href="#Increase-runs">Increase <code>runs</code></a><a id="Increase-runs-1"></a><a class="docs-heading-anchor-permalink" href="#Increase-runs" title="Permalink"></a></h3><p>Increasing <code>runs</code> (default is 2) takes more computing resources but can be useful to get more precise estimates. If we set <code>runs=3</code> when using original <code>bmi</code> (ill-conditioned), the estimated τ are more accurate. The estimate of Σγ is still off though.</p><pre><code class="language-julia"># improve estimates from ill-conditioned data by more runs
+WiSER.fit!(vlmm_bmi, runs=3)</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.445610, ‖ΔL‖ = 2.027674, status = Optimal, time(s) = 0.085767
+run = 2, ‖Δβ‖ = 0.032012, ‖Δτ‖ = 0.014061, ‖ΔL‖ = 0.780198, status = Optimal, time(s) = 0.129032
+run = 3, ‖Δβ‖ = 0.008059, ‖Δτ‖ = 0.000678, ‖ΔL‖ = 0.083976, status = Optimal, time(s) = 0.154331
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi + meds
+Random Effects Formula:
+sbp ~ 1 + bmi
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+────────────────────────────────────────────────────────────
+                      Estimate  Std. Error       Z  Pr(&gt;|Z|)
+────────────────────────────────────────────────────────────
+β1: (Intercept)   100.139        0.315745   317.15    &lt;1e-99
+β2: agegroup       14.9839       0.0633172  236.65    &lt;1e-99
+β3: gender: Male   10.0753       0.10027    100.48    &lt;1e-99
+β4: bmi             0.246528     0.0114083   21.61    &lt;1e-99
+β5: meds: OnMeds  -10.1109       0.122778   -82.35    &lt;1e-99
+τ1: (Intercept)    -2.63079      0.453424    -5.80    &lt;1e-08
+τ2: agegroup        1.5079       0.0253371   59.51    &lt;1e-99
+τ3: meds: OnMeds   -0.435791     0.051245    -8.50    &lt;1e-16
+τ4: bmi             0.00436541   0.0178825    0.24    0.8071
+────────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  0.377439    0.00949012
+ &quot;γ2: bmi&quot;          0.00949012  0.000238614</code></pre><h3 id="Try-different-nonlinear-programming-(NLP)-solvers"><a class="docs-heading-anchor" href="#Try-different-nonlinear-programming-(NLP)-solvers">Try different nonlinear programming (NLP) solvers</a><a id="Try-different-nonlinear-programming-(NLP)-solvers-1"></a><a class="docs-heading-anchor-permalink" href="#Try-different-nonlinear-programming-(NLP)-solvers" title="Permalink"></a></h3><p>A different solver may remedy the issue. By default, <code>WiSER.jl</code> uses the <a href="https://github.com/jump-dev/Ipopt.jl">Ipopt</a> solver, but it can use any solver that supports <a href="https://github.com/JuliaOpt/MathProgBase.jl">MathProgBase.jl</a>. Check documentation of <code>fit!</code> for commonly used NLP solvers. In our experience, <a href="https://github.com/JuliaOpt/KNITRO.jl">Knitro.jl</a> works the best, but it is a commercial software.</p><pre><code class="language-julia"># watchdog_shortened_iter_trigger option in IPOPT can sometimes be more robust to numerical issues
+WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=0, watchdog_shortened_iter_trigger=3, max_iter=100))</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.081864
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.068715
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   106.308       0.14384    739.07    &lt;1e-99
+β2: agegroup       14.9844      0.0633245  236.63    &lt;1e-99
+β3: gender: Male   10.0749      0.100279   100.47    &lt;1e-99
+β4: bmi_std         0.296424    0.0139071   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1107      0.122918   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.5212      0.393792    -6.40    &lt;1e-09
+τ2: agegroup        1.50759     0.135456    11.13    &lt;1e-28
+τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    &lt;1e-11
+τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00196    0.0181387
+ &quot;γ2: bmi_std&quot;      0.0181387  0.000549357</code></pre><pre><code class="language-julia"># print Ipopt iterates for diagnostics
+WiSER.fit!(vlmm, Ipopt.IpoptSolver(print_level=5, mehrotra_algorithm=&quot;yes&quot;, warm_start_init_point=&quot;yes&quot;))</code></pre><pre><code class="language-none">This is Ipopt version 3.13.4, running with linear solver mumps.
+NOTE: Other linear solvers might be more efficient (see Ipopt documentation).
+
+Number of nonzeros in equality constraint Jacobian...:        0
+Number of nonzeros in inequality constraint Jacobian.:        0
+Number of nonzeros in Lagrangian Hessian.............:       28
+
+Total number of variables............................:        7
+                     variables with only lower bounds:        0
+                variables with lower and upper bounds:        0
+                     variables with only upper bounds:        0
+Total number of equality constraints.................:        0
+Total number of inequality constraints...............:        0
+        inequality constraints with only lower bounds:        0
+   inequality constraints with lower and upper bounds:        0
+        inequality constraints with only upper bounds:        0
+
+iter    objective    inf_pr   inf_du lg(mu)  ||d||  lg(rg) alpha_du alpha_pr  ls
+   0  2.8331778e+04 0.00e+00 1.00e+02   0.0 0.00e+00    -  0.00e+00 0.00e+00   0
+   1  2.8314110e+04 0.00e+00 2.49e+01 -11.0 3.08e-01    -  1.00e+00 1.00e+00f  1
+   2  2.8312135e+04 0.00e+00 3.32e+00 -11.0 2.63e-01    -  1.00e+00 1.00e+00f  1
+   3  2.8311752e+04 0.00e+00 1.36e+00 -11.0 2.08e-01    -  1.00e+00 1.00e+00f  1
+   4  2.8311700e+04 0.00e+00 3.34e-01 -11.0 1.25e-01    -  1.00e+00 1.00e+00f  1
+   5  2.8311697e+04 0.00e+00 2.79e-02 -11.0 3.98e-02    -  1.00e+00 1.00e+00f  1
+   6  2.8311697e+04 0.00e+00 2.40e-04 -11.0 3.48e-03    -  1.00e+00 1.00e+00f  1
+   7  2.8311697e+04 0.00e+00 5.47e-06 -11.0 2.47e-05    -  1.00e+00 1.00e+00f  1
+   8  2.8311697e+04 0.00e+00 9.63e-08 -11.0 1.20e-08    -  1.00e+00 1.00e+00f  1
+   9  2.8311697e+04 0.00e+00 5.21e-09 -11.0 1.61e-10    -  1.00e+00 1.00e+00f  1
+
+Number of Iterations....: 9
+
+                                   (scaled)                 (unscaled)
+Objective...............:   1.6226171160602307e+04    2.8311697021847336e+04
+Dual infeasibility......:   5.2103428765066918e-09    9.0910940997446232e-09
+Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
+Complementarity.........:   0.0000000000000000e+00    0.0000000000000000e+00
+Overall NLP error.......:   5.2103428765066918e-09    9.0910940997446232e-09
+
+
+Number of objective function evaluations             = 10
+Number of objective gradient evaluations             = 10
+Number of equality constraint evaluations            = 0
+Number of inequality constraint evaluations          = 0
+Number of equality constraint Jacobian evaluations   = 0
+Number of inequality constraint Jacobian evaluations = 0
+Number of Lagrangian Hessian evaluations             = 9
+Total CPU secs in IPOPT (w/o function evaluations)   =      0.008
+Total CPU secs in NLP function evaluations           =      0.057
+
+EXIT: Optimal Solution Found.
+run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.081372
+This is Ipopt version 3.13.4, running with linear solver mumps.
+NOTE: Other linear solvers might be more efficient (see Ipopt documentation).
+
+Number of nonzeros in equality constraint Jacobian...:        0
+Number of nonzeros in inequality constraint Jacobian.:        0
+Number of nonzeros in Lagrangian Hessian.............:       28
+
+Total number of variables............................:        7
+                     variables with only lower bounds:        0
+                variables with lower and upper bounds:        0
+                     variables with only upper bounds:        0
+Total number of equality constraints.................:        0
+Total number of inequality constraints...............:        0
+        inequality constraints with only lower bounds:        0
+   inequality constraints with lower and upper bounds:        0
+        inequality constraints with only upper bounds:        0
+
+iter    objective    inf_pr   inf_du lg(mu)  ||d||  lg(rg) alpha_du alpha_pr  ls
+   0  2.7170793e+04 0.00e+00 1.52e+01   0.0 0.00e+00    -  0.00e+00 0.00e+00   0
+   1  2.7170194e+04 0.00e+00 3.80e+00 -11.0 3.15e-01    -  1.00e+00 1.00e+00f  1
+   2  2.7170055e+04 0.00e+00 1.91e+00 -11.0 3.07e-01    -  1.00e+00 1.00e+00f  1
+   3  2.7170020e+04 0.00e+00 9.10e-01 -11.0 2.86e-01    -  1.00e+00 1.00e+00f  1
+   4  2.7170013e+04 0.00e+00 3.93e-01 -11.0 2.47e-01    -  1.00e+00 1.00e+00f  1
+   5  2.7170011e+04 0.00e+00 1.35e-01 -11.0 1.82e-01    -  1.00e+00 1.00e+00f  1
+   6  2.7170011e+04 0.00e+00 2.58e-02 -11.0 9.30e-02    -  1.00e+00 1.00e+00f  1
+   7  2.7170011e+04 0.00e+00 1.16e-03 -11.0 2.12e-02    -  1.00e+00 1.00e+00f  1
+   8  2.7170011e+04 0.00e+00 9.88e-06 -11.0 9.61e-04    -  1.00e+00 1.00e+00f  1
+   9  2.7170011e+04 0.00e+00 2.64e-07 -11.0 2.10e-06    -  1.00e+00 1.00e+00f  1
+iter    objective    inf_pr   inf_du lg(mu)  ||d||  lg(rg) alpha_du alpha_pr  ls
+  10  2.7170011e+04 0.00e+00 4.68e-09 -11.0 6.64e-09    -  1.00e+00 1.00e+00f  1
+
+Number of Iterations....: 10
+
+                                   (scaled)                 (unscaled)
+Objective...............:   2.7170011141755771e+04    2.7170011141755771e+04
+Dual infeasibility......:   4.6827675070915120e-09    4.6827675070915120e-09
+Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
+Complementarity.........:   0.0000000000000000e+00    0.0000000000000000e+00
+Overall NLP error.......:   4.6827675070915120e-09    4.6827675070915120e-09
+
+
+Number of objective function evaluations             = 11
+Number of objective gradient evaluations             = 11
+Number of equality constraint evaluations            = 0
+Number of inequality constraint evaluations          = 0
+Number of equality constraint Jacobian evaluations   = 0
+Number of inequality constraint Jacobian evaluations = 0
+Number of Lagrangian Hessian evaluations             = 10
+Total CPU secs in IPOPT (w/o function evaluations)   =      0.008
+Total CPU secs in NLP function evaluations           =      0.057
+
+EXIT: Optimal Solution Found.
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.068690
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   106.308       0.14384    739.07    &lt;1e-99
+β2: agegroup       14.9844      0.0633245  236.63    &lt;1e-99
+β3: gender: Male   10.0749      0.100279   100.47    &lt;1e-99
+β4: bmi_std         0.296424    0.0139071   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1107      0.122918   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.5212      0.393792    -6.40    &lt;1e-09
+τ2: agegroup        1.50759     0.135456    11.13    &lt;1e-28
+τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    &lt;1e-11
+τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00196    0.0181387
+ &quot;γ2: bmi_std&quot;      0.0181387  0.000549357</code></pre><pre><code class="language-julia"># use Knitro (require installation of Knitro software and Knitro.jl)
+# Using KNITRO
+# WiSER.fit!(vlmm, KNITRO.KnitroSolver(outlev=3));</code></pre><pre><code class="language-julia"># use NLopt
+WiSER.fit!(vlmm, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.162196, ‖ΔL‖ = 0.100050, status = Optimal, time(s) = 0.148150
+run = 2, ‖Δβ‖ = 0.005248, ‖Δτ‖ = 0.008747, ‖ΔL‖ = 0.001335, status = Optimal, time(s) = 0.052991
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   106.308       0.14384    739.07    &lt;1e-99
+β2: agegroup       14.9844      0.0633238  236.63    &lt;1e-99
+β3: gender: Male   10.0749      0.100277   100.47    &lt;1e-99
+β4: bmi_std         0.296421    0.0139114   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1106      0.122912   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.53263     0.102707   -24.66    &lt;1e-99
+τ2: agegroup        1.51161     0.038887    38.87    &lt;1e-99
+τ3: meds: OnMeds   -0.435901    0.0524849   -8.31    &lt;1e-16
+τ4: bmi_std         0.0057698   0.0218516    0.26    0.7917
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00228    0.0179118
+ &quot;γ2: bmi_std&quot;      0.0179118  0.00441744</code></pre><p>Using a different solver can even help without the need for standardizing predictors. If we use the NLOPT solver with the <code>LD_MMA</code> algorithm on the model where bmi is not standardized we don&#39;t see heavily inflated standard errors.</p><pre><code class="language-julia"># Using other solvers can work without standardizing 
+WiSER.fit!(vlmm_bmi, NLopt.NLoptSolver(algorithm=:LD_MMA, maxeval=4000))</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.208950, ‖Δτ‖ = 0.143776, ‖ΔL‖ = 1.528229, status = Optimal, time(s) = 0.604965
+run = 2, ‖Δβ‖ = 0.026830, ‖Δτ‖ = 0.000125, ‖ΔL‖ = 0.000257, status = Optimal, time(s) = 0.046570
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi + meds
+Random Effects Formula:
+sbp ~ 1 + bmi
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   100.126       0.323755   309.26    &lt;1e-99
+β2: agegroup       14.9849      0.0633317  236.61    &lt;1e-99
+β3: gender: Male   10.0748      0.10029    100.46    &lt;1e-99
+β4: bmi             0.246967    0.0117298   21.05    &lt;1e-97
+β5: meds: OnMeds  -10.1094      0.122977   -82.21    &lt;1e-99
+τ1: (Intercept)    -3.01501     0.811039    -3.72    0.0002
+τ2: agegroup        1.50948     0.0468194   32.24    &lt;1e-99
+τ3: meds: OnMeds   -0.426979    0.0519209   -8.22    &lt;1e-15
+τ4: bmi             0.0192299   0.0368267    0.52    0.6016
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;   3.89413   -0.127903
+ &quot;γ2: bmi&quot;          -0.127903   0.00561294</code></pre><h3 id="Try-different-starting-points"><a class="docs-heading-anchor" href="#Try-different-starting-points">Try different starting points</a><a id="Try-different-starting-points-1"></a><a class="docs-heading-anchor-permalink" href="#Try-different-starting-points" title="Permalink"></a></h3><p>Initialization matters as well. By default, <code>fit!</code> uses a crude least squares estimate as the starting point. We can also try a method of moment estimate or user-supplied values.</p><pre><code class="language-julia"># MoM starting point
+WiSER.fit!(vlmm, init = init_mom!(vlmm))</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.036245, ‖Δτ‖ = 0.188207, ‖ΔL‖ = 0.127483, status = Optimal, time(s) = 0.062208
+run = 2, ‖Δβ‖ = 0.006798, ‖Δτ‖ = 0.009128, ‖ΔL‖ = 0.050049, status = Optimal, time(s) = 0.059064
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+────────────────────────────────────────────────────────────
+                      Estimate  Std. Error       Z  Pr(&gt;|Z|)
+────────────────────────────────────────────────────────────
+β1: (Intercept)   106.308        0.143831   739.12    &lt;1e-99
+β2: agegroup       14.9846       0.063327   236.62    &lt;1e-99
+β3: gender: Male   10.0747       0.100282   100.46    &lt;1e-99
+β4: bmi_std         0.296596     0.013989    21.20    &lt;1e-99
+β5: meds: OnMeds  -10.1107       0.122973   -82.22    &lt;1e-99
+τ1: (Intercept)    -2.52233      0.218068   -11.57    &lt;1e-30
+τ2: agegroup        1.5079       0.0759423   19.86    &lt;1e-87
+τ3: meds: OnMeds   -0.434951     0.0549139   -7.92    &lt;1e-14
+τ4: bmi_std         0.00527178   0.0220323    0.24    0.8109
+────────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00193    0.0180064
+ &quot;γ2: bmi_std&quot;      0.0180064  0.000967577</code></pre><pre><code class="language-julia"># user-supplied starting point in vlmm.β, vlmm.τ, vlmm.Lγ
+vlmm.β .= [106.0; 15.0; 10.0; 0.3; -10.0]
+vlmm.τ .= [-2.5; 1.5; -0.5; 0.0]
+vlmm.Lγ .= [1.0 0.0; 0.0 0.0]
+
+fit!(vlmm, init = vlmm)</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.337743, ‖Δτ‖ = 0.069850, ‖ΔL‖ = 0.017323, status = Optimal, time(s) = 0.078268
+run = 2, ‖Δβ‖ = 0.003050, ‖Δτ‖ = 0.004463, ‖ΔL‖ = 0.001185, status = Optimal, time(s) = 0.104889
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+────────────────────────────────────────────────────────────
+                      Estimate  Std. Error       Z  Pr(&gt;|Z|)
+────────────────────────────────────────────────────────────
+β1: (Intercept)   106.309        0.143859   738.98    &lt;1e-99
+β2: agegroup       14.984        0.0633192  236.64    &lt;1e-99
+β3: gender: Male   10.0754       0.100275   100.48    &lt;1e-99
+β4: bmi_std         0.296078     0.0136905   21.63    &lt;1e-99
+β5: meds: OnMeds  -10.1108       0.122807   -82.33    &lt;1e-99
+τ1: (Intercept)    -2.52144      0.0576657  -43.73    &lt;1e-99
+τ2: agegroup        1.50787      0.0253351   59.52    &lt;1e-99
+τ3: meds: OnMeds   -0.436135     0.0512042   -8.52    &lt;1e-16
+τ4: bmi_std         0.00525556   0.0214765    0.24    0.8067
+────────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00203    0.0184422
+ &quot;γ2: bmi_std&quot;      0.0184422  0.000339423</code></pre><h2 id="Additional-Features"><a class="docs-heading-anchor" href="#Additional-Features">Additional Features</a><a id="Additional-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Additional-Features" title="Permalink"></a></h2><p>WiSER.jl has additional features that may benefit some users. These include parallelizaiton and observation weights.</p><h3 id="Parallelization"><a class="docs-heading-anchor" href="#Parallelization">Parallelization</a><a id="Parallelization-1"></a><a class="docs-heading-anchor-permalink" href="#Parallelization" title="Permalink"></a></h3><p>WiSER.jl by default will not run objective function evaluations in parallel, but one at a time. In many cases (small number of individuals/relatively small number of observations per individual) it is faster to not parallelize the code as the internal overhead in setting up evaluations on multiple threads takes longer than the evaluations. However, with large numbers of observations per individual, or many individuals, it can be faster to parallelize.</p><p>In order to allow for parallelization, the julia environmental variable <code>JULIA_NUM_THREADS</code> should be set to a value greater than 1. This must be set before julia launches and can be done in couple ways:</p><ul><li>Setting a default number of threads for Julia to launch with in a <code>.bash_profile</code> file by adding a line <code>export JULIA_NUM_THREADS=X</code>. where X is the number of threads you wish to make the default.</li><li>Before launching julia in the terminal, export the variable as done below:</li></ul><pre><code class="language-none">$ export JULIA_NUM_THREADS=X
+$ julia</code></pre><p>This is different from the threads available used by BLAS commands. To check this number of threads for parallelization, run the following:</p><pre><code class="language-julia">Threads.nthreads()</code></pre><pre><code class="language-none">4</code></pre><p>We see there are 4 threads available. </p><p>To parallelize the objective function in WiSER, simply add the keyword argument <code>parallel = true</code> in the <code>fit!()</code> function.</p><pre><code class="language-julia">WiSER.fit!(vlmm, parallel = true)</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.237454
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.158717
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+───────────────────────────────────────────────────────────
+                     Estimate  Std. Error       Z  Pr(&gt;|Z|)
+───────────────────────────────────────────────────────────
+β1: (Intercept)   106.308       0.14384    739.07    &lt;1e-99
+β2: agegroup       14.9844      0.0633245  236.63    &lt;1e-99
+β3: gender: Male   10.0749      0.100279   100.47    &lt;1e-99
+β4: bmi_std         0.296424    0.0139071   21.31    &lt;1e-99
+β5: meds: OnMeds  -10.1107      0.122918   -82.26    &lt;1e-99
+τ1: (Intercept)    -2.5212      0.393792    -6.40    &lt;1e-09
+τ2: agegroup        1.50759     0.135456    11.13    &lt;1e-28
+τ3: meds: OnMeds   -0.435225    0.0621076   -7.01    &lt;1e-11
+τ4: bmi_std         0.0052695   0.0224039    0.24    0.8140
+───────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.00196    0.0181387
+ &quot;γ2: bmi_std&quot;      0.0181387  0.000549357</code></pre><p>We can see slight timing differences at this sample size:</p><pre><code class="language-julia">@time WiSER.fit!(vlmm, parallel = false);</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.065098
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.070394
+  0.141617 seconds (417 allocations: 38.531 KiB)</code></pre><pre><code class="language-julia">@time WiSER.fit!(vlmm, parallel = true);</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.166678, ‖ΔL‖ = 0.100999, status = Optimal, time(s) = 0.150904
+run = 2, ‖Δβ‖ = 0.005220, ‖Δτ‖ = 0.006748, ‖ΔL‖ = 0.048735, status = Optimal, time(s) = 0.164348
+  0.325590 seconds (1.95 k allocations: 174.953 KiB)</code></pre><h3 id="Observation-Weights"><a class="docs-heading-anchor" href="#Observation-Weights">Observation Weights</a><a id="Observation-Weights-1"></a><a class="docs-heading-anchor-permalink" href="#Observation-Weights" title="Permalink"></a></h3><p>It can be useful for some users to fit WiSER with observation weights. We have implemented this feature, which can be done in the model constructor via the <code>wtvar</code> keyword. Note: Within each individual, observation weights are the same. We assume weights are per-indiviudal.</p><p>In the example data, the dataframe has a column <code>obswt</code>, corresponding to observation weights for each individual. </p><pre><code class="language-julia">vlmm_wts = WSVarLmmModel(
+    @formula(sbp ~ 1 + agegroup + gender + bmi_std + meds), 
+    @formula(sbp ~ 1 + bmi_std), 
+    @formula(sbp ~ 1 + agegroup + meds + bmi_std),
+    :id, df; wtvar = :obswt);
+
+@time WiSER.fit!(vlmm_wts)</code></pre><pre><code class="language-none">run = 1, ‖Δβ‖ = 0.037311, ‖Δτ‖ = 0.158033, ‖ΔL‖ = 0.102058, status = Optimal, time(s) = 0.062162
+run = 2, ‖Δβ‖ = 0.006134, ‖Δτ‖ = 0.007594, ‖ΔL‖ = 0.056873, status = Optimal, time(s) = 0.078738
+  0.146753 seconds (447 allocations: 40.500 KiB)
+
+
+
+
+
+
+Within-subject variance estimation by robust regression (WiSER)
+
+Mean Formula:
+sbp ~ 1 + agegroup + gender + bmi_std + meds
+Random Effects Formula:
+sbp ~ 1 + bmi_std
+Within-Subject Variance Formula:
+sbp ~ 1 + agegroup + meds + bmi_std
+
+Number of individuals/clusters: 500
+Total observations: 5011
+
+Fixed-effects parameters:
+────────────────────────────────────────────────────────────
+                      Estimate  Std. Error       Z  Pr(&gt;|Z|)
+────────────────────────────────────────────────────────────
+β1: (Intercept)   106.309       0.143971    738.41    &lt;1e-99
+β2: agegroup       14.9841      0.0633336   236.59    &lt;1e-99
+β3: gender: Male   10.0748      0.100288    100.46    &lt;1e-99
+β4: bmi_std         0.296066    0.0139064    21.29    &lt;1e-99
+β5: meds: OnMeds  -10.1101      0.122602    -82.46    &lt;1e-99
+τ1: (Intercept)    -2.51639     0.267541     -9.41    &lt;1e-20
+τ2: agegroup        1.50717     0.0914489    16.48    &lt;1e-60
+τ3: meds: OnMeds   -0.445596    0.0366911   -12.14    &lt;1e-33
+τ4: bmi_std         0.00634263  0.00812327    0.78    0.4349
+────────────────────────────────────────────────────────────
+Random effects covariance matrix Σγ:
+ &quot;γ1: (Intercept)&quot;  1.05449    0.0279852
+ &quot;γ2: bmi_std&quot;      0.0279852  0.000792437</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« WiSER.jl Introduction</a><a class="docs-footer-nextpage" href="../simulation/">Simulating responses »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Tuesday 9 May 2023 10:49">Tuesday 9 May 2023</span>. Using Julia version 1.6.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
