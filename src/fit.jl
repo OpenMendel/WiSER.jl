@@ -214,7 +214,7 @@ function MOI.hessian_lagrangian_structure(m::WSVarLmmModel)
         arr2[idx] = j
         idx      += 1
     end
-    return zip(arr1, arr2)
+    return collect(zip(arr1, arr2))
 end
 
 function MOI.eval_hessian_lagrangian(
